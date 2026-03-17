@@ -1,7 +1,12 @@
 import jwt from "jsonwebtoken";
-import { JwtPayload } from "../types/auth.types";
+import { JwtPayloadSchema, JwtPayload } from "../schemas/auth.schema";
+import { AppError } from "../errors/AppError";
 
-const SECRET = process.env.JWT_SECRET || "supersecret";
+if (!process.env.JWT_SECRET) {
+  throw new AppError("JWT_SECRET is not defined in environment variables", 500);
+}
+
+const SECRET = process.env.JWT_SECRET;
 
 export const generateToken = (payload: JwtPayload): string => {
   return jwt.sign(payload, SECRET, {
@@ -10,5 +15,11 @@ export const generateToken = (payload: JwtPayload): string => {
 };
 
 export const verifyToken = (token: string): JwtPayload => {
-  return jwt.verify(token, SECRET) as JwtPayload;
+  try {
+    const decoded = jwt.verify(token, SECRET);
+    const parsed = JwtPayloadSchema.parse(decoded);
+    return parsed;
+  } catch {
+    throw new AppError("Invalid or expired token", 401);
+  }
 };
