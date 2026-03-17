@@ -48,12 +48,16 @@ export class GlobalResponse {
     return res.status(statusCode).json({ success: false, message });
   }
 
-  static notFound(res: Response, message = "Recurso no encontrado") {
-    return res.status(404).json({ success: false, message });
-  }
-
   static unauthorized(res: Response, message = "No autorizado") {
     return res.status(401).json({ success: false, message });
+  }
+
+  static forbidden(res: Response, message = "Permisos insuficientes") {
+    return res.status(403).json({ success: false, message });
+  }
+  
+  static notFound(res: Response, message = "Recurso no encontrado") {
+    return res.status(404).json({ success: false, message });
   }
 
   static serverError(res: Response, message = "Error interno del servidor") {
