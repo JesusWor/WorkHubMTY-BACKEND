@@ -1,7 +1,17 @@
+export type UserRole =
+  | "IT"
+  | "FINANCE"
+  | "ADMIN"
+  | "USER";
+
 export interface Notification {
   id: string;
-  userId: string;
+  title: string;
   message: string;
-  date: Date;
-  read: boolean;
+  createdAt: Date;
+
+  targetUsers?: string[];
+  targetRoles?: UserRole[];
+
+  readBy: string[];
 }
