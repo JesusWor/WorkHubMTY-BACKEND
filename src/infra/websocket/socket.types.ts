@@ -1,10 +1,8 @@
 import { Server, Socket } from "socket.io";
+import { Notification } from "../../shared/types/notifications.types";
 
 export interface ServerToClientEvents {
-  notification: (data: {
-    message: string;
-    date: Date;
-  }) => void;
+  notification: (data: Notification) => void;
 }
 
 export interface ClientToServerEvents {
