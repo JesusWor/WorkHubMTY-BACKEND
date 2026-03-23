@@ -48,6 +48,10 @@ export class GlobalResponse {
     return res.status(statusCode).json({ success: false, message });
   }
 
+  static badRequest(res: Response, message = "Solicitud incorrecta") {
+    return this.fail(res, message, 400);
+  }
+
   static unauthorized(res: Response, message = "No autorizado") {
     return res.status(401).json({ success: false, message });
   }

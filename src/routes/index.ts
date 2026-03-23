@@ -1,8 +1,15 @@
 import { Router } from "express";
-import healthRoutes from "./health.routes";
+import healthRouter from "./health.router";
+import generateTokenRouter from "./generate-token.router";
+import { buildContainer } from "../app/container";
 
 const router = Router();
 
-router.use("/health", healthRoutes);
+const { roleRouter } = buildContainer();
+
+router.use("/health", healthRouter);
+router.use("/generate-token", generateTokenRouter)
+
+router.use("/roles", roleRouter.router);
 
 export default router;

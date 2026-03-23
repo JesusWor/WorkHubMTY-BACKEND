@@ -1,12 +1,13 @@
 import jwt from "jsonwebtoken";
 import { JwtPayloadSchema, JwtPayload } from "../schemas/auth.schema";
 import { AppError } from "../errors/AppError";
+import { config } from "../../config/env";
 
-if (!process.env.JWT_SECRET) {
+if (!config.jwt_secret) {
   throw new AppError("JWT_SECRET is not defined in environment variables", 500);
 }
 
-const SECRET = process.env.JWT_SECRET;
+const SECRET = config.jwt_secret;
 
 export const generateToken = (payload: JwtPayload): string => {
   return jwt.sign(payload, SECRET, {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../shared/utils/jwt.util";
 import { GlobalResponse } from "../shared/response/globalresponse";
+import { JwtPayloadSchema } from "../shared/schemas/auth.schema"
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -13,8 +14,9 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
 
   try {
     const decoded = verifyToken(token);
+    const parsed = JwtPayloadSchema.parse(decoded);
     req.user = decoded;
-    next();
+    return next();
   } catch (error) {
     return GlobalResponse.unauthorized(res);
   }
