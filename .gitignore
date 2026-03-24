@@ -5,3 +5,4 @@ dist
 .env
 **/.env
 config/env.ts
+/src/generated/prisma
