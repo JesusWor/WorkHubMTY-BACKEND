@@ -1,7 +1,8 @@
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { UserRepo } from "./user.repo.js";
 import { LoginDto, User } from "./user.schema.js";
+import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema.js";
+import { generateToken } from "../../shared/utils/jwt.util.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key";
 
@@ -17,11 +18,13 @@ export function makeUserService(userRepo: UserRepo): UserService {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new Error("Credenciales inválidas");
 
-    const token = jwt.sign(
-      { e_id: user.e_id, role_id: user.role_id },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const payload: JwtPayload= {
+      userId: user.e_id,
+      email: user.password,
+      role: mapRole(user.role_id.toString())
+    };
+
+    const token = generateToken(payload);
 
     const { password: _, ...userWithoutPassword } = user;
     return { token, user: userWithoutPassword };

@@ -1,5 +1,6 @@
 import { Db } from "../../infra/db/db.js";
 import { User } from "./user.schema.js";
+import { JwtPayload, Roles } from "../../shared/schemas/auth.schema";
 
 export type UserRepo = {
   findByEId: (e_id: string) => Promise<User | null>;
