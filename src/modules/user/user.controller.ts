@@ -10,6 +10,7 @@ export type UserController = {
 export function makeUserController(service: UserService): UserController {
   const login = async (req: Request, res: Response): Promise<void> => {
     try {
+      console.log(req);
       const parsed = LoginSchema.safeParse(req.body);
       if (!parsed.success) {
         GlobalResponse.zodError(res, parsed.error);

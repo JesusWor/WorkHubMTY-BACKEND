@@ -4,8 +4,6 @@ import { LoginDto, User } from "./user.schema";
 import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema";
 import { generateToken } from "../../shared/utils/jwt.util";
 
-const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key";
-
 export type UserService = {
   login: (dto: LoginDto) => Promise<{ token: string; user: Omit<User, "password"> }>;
 };
