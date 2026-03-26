@@ -2,12 +2,7 @@ import { Router } from "express";
 import { RoleController } from "./role.controller";
 import { authMiddleware, roleMiddleware, Roles } from "../../middleware";
 
-
-export type RoleRouter = {
-    router: Router;
-}
-
-export function makeRoleRouter(controller: RoleController): RoleRouter {
+export function makeRoleRouter(controller: RoleController): Router {
     const router = Router();
 
     /**
@@ -120,5 +115,5 @@ export function makeRoleRouter(controller: RoleController): RoleRouter {
      */
     router.delete("/:id", authMiddleware, roleMiddleware(Roles.ADMIN), controller.delete);
 
-    return { router }
+    return router;
 }

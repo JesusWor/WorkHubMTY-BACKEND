@@ -1,23 +1,23 @@
 import { v4 as uuidv4 } from "uuid";
 import { getIO } from "../../infra/websocket/socket.server";
-import { Notification, UserRole } from "../../shared/types/notifications.types";
+import { NotificationService, Notification, UserRole } from "./notifications.schema";
 
-class NotificationService {
+export function makeNotificationService() : NotificationService{
 
-  private notifications: Map<string, Notification> = new Map();
+  const notifications : Map<string, Notification> = new Map();
 
-  private userRoles: Map<string, UserRole> = new Map();
+  const userRoles : Map<string, UserRole> = new Map();
 
-  subscribeUser(userId: string, role: UserRole) {
-    this.userRoles.set(userId, role);
+  const subscribeUser = (userId: string, role: UserRole) => {
+    userRoles.set(userId, role);
   }
 
-  createNotification(
+  const createNotification = (
     title: string,
     message: string,
     targetUsers?: string[],
     targetRoles?: UserRole[]
-  ) {
+  ) => {
 
     const notification: Notification = {
       id: uuidv4(),
@@ -29,7 +29,7 @@ class NotificationService {
       readBy: []
     };
 
-    this.notifications.set(notification.id, notification);
+    notifications.set(notification.id, notification);
 
     const io = getIO();
 
@@ -40,7 +40,7 @@ class NotificationService {
     }
 
     if (targetRoles) {
-      this.userRoles.forEach((role, userId) => {
+      userRoles.forEach((role, userId) => {
         if (targetRoles.includes(role)) {
           io.to(userId).emit("notification", notification);
         }
@@ -50,13 +50,13 @@ class NotificationService {
     return notification;
   }
 
-  getUserNotifications(userId: string) {
+  const getUserNotifications = (userId: string) => {
 
-    const role = this.userRoles.get(userId);
+    const role = userRoles.get(userId);
 
     const result: Notification[] = [];
 
-    this.notifications.forEach((n) => {
+    notifications.forEach((n) => {
 
       if (
         n.targetUsers?.includes(userId) ||
@@ -74,19 +74,24 @@ class NotificationService {
     return result;
   }
 
-  markAsRead(notificationId: string, userId: string) {
+  const markAsRead = (notificationId: string, userId: string) => {
 
-    const notif = this.notifications.get(notificationId);
+    const notif = notifications.get(notificationId);
 
     if (!notif) return;
 
     notif.readBy.push(userId);
   }
 
-  deleteNotification(notificationId: string) {
-    this.notifications.delete(notificationId);
+  const deleteNotification = (notificationId: string) => {
+    notifications.delete(notificationId);
   }
 
+  return {
+    subscribeUser,
+    createNotification,
+    getUserNotifications,
+    markAsRead,
+    deleteNotification
+  }
 }
-
-export const notificationService = new NotificationService();

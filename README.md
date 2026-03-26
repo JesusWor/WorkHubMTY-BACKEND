@@ -1,32 +1,79 @@
 # WorkHubMTY-BACKEND
 
 ```
-├── src
-│   ├── app
-│   │   └── container.ts
-│   ├── config
-│   ├── docs
-│   │   └── swagger.ts
-│   ├── infra
-│   │   └── db
-│   │       └── db.ts
-│   ├── shared
-│   │   ├── errors
-│   │   │   └── AppError.ts
-│   │   └── response
-│   │       └── globalresponse.ts
-│   ├── app.ts
-│   └── server.ts
-├── .gitignore
-├── Dockerfile
-├── README.md
-├── package-lock.json
-├── package.json
-└── tsconfig.json
+├── 📁 src
+│   ├── 📁 app
+│   │   ├── 📁 controllers
+│   │   │   └── 📄 notification.controller.ts
+│   │   ├── 📁 routes
+│   │   │   └── 📄 notification.routes.ts
+│   │   ├── 📁 services
+│   │   │   ├── 📄 email.service.ts
+│   │   │   └── 📄 notification.service.ts
+│   │   └── 📄 container.ts
+│   ├── 📁 config
+│   │   └── 📄 mail.config.ts
+│   ├── 📁 docs
+│   │   └── 📄 swagger.ts
+│   ├── 📁 infra
+│   │   ├── 📁 db
+│   │   │   └── 📄 db.ts
+│   │   └── 📁 websocket
+│   │       ├── 📄 socket.server.ts
+│   │       └── 📄 socket.types.ts
+│   ├── 📁 middleware
+│   │   ├── 📄 auth.middleware.ts
+│   │   ├── 📄 index.ts
+│   │   └── 📄 role.middleware.ts
+│   ├── 📁 modules
+│   │   ├── 📁 role
+│   │   │   ├── 📄 index.ts
+│   │   │   ├── 📄 role.controller.ts
+│   │   │   ├── 📄 role.repo.ts
+│   │   │   ├── 📄 role.router.ts
+│   │   │   ├── 📄 role.schema.ts
+│   │   │   └── 📄 role.service.ts
+│   │   └── 📁 user
+│   │       ├── 📄 index.ts
+│   │       ├── 📄 user.controller.ts
+│   │       ├── 📄 user.repo.ts
+│   │       ├── 📄 user.router.ts
+│   │       ├── 📄 user.schema.ts
+│   │       └── 📄 user.service.ts
+│   ├── 📁 routes
+│   │   ├── 📄 generate-token.router.ts
+│   │   ├── 📄 health.router.ts
+│   │   └── 📄 index.ts
+│   ├── 📁 shared
+│   │   ├── 📁 errors
+│   │   │   └── 📄 AppError.ts
+│   │   ├── 📁 response
+│   │   │   └── 📄 globalresponse.ts
+│   │   ├── 📁 schemas
+│   │   │   └── 📄 auth.schema.ts
+│   │   ├── 📁 types
+│   │   │   ├── 📄 email.types.ts
+│   │   │   ├── 📄 express.d.ts
+│   │   │   └── 📄 notifications.types.ts
+│   │   └── 📁 utils
+│   │       ├── 📄 guid.util.ts
+│   │       ├── 📄 jwt.util.ts
+│   │       └── 📄 logger.util.ts
+│   ├── 📄 app.ts
+│   └── 📄 server.ts
+├── ⚙️ .env.example
+├── ⚙️ .gitignore
+├── 🐳 Dockerfile
+├── 📝 README.md
+├── ⚙️ package-lock.json
+├── ⚙️ package.json
+└── ⚙️ tsconfig.json
 ```
+
+---
 ## Dependencies
 ```bash
-npm install express cors mysql2 zod pg dotenv socket.io nodemailer jsonwebtoken uuid
+npm install express cors mysql2 zod pg dotenv socket.io nodemailer jsonwebtoken uuid swagger-ui-express
 ```
 You need install this dependencies to run the code
 
@@ -75,4 +122,8 @@ You can apply the same thing for nodeamiler and socket
 npm install -D @types/socket.io
 npm install -D @types/nodemailer
 npm install -D @types/jsonwebtoken
+```
+More dependencies yo will need
+```
+npm install -D @types/bcrypt
 ```
