@@ -29,8 +29,7 @@ export const mapRole = (roleFromAny: string): Roles => {
 const RoleSchema = z.string().transform((r) => mapRole(r));
 
 export const JwtPayloadSchema = z.object({
-  userId: z.string(),
-  email: z.string().email(),
+  id: z.string(),
   role: RoleSchema,
 });
 

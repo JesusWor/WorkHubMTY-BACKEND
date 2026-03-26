@@ -5,11 +5,12 @@ import { buildContainer } from "../app/container";
 
 const router = Router();
 
-const { roleRouter } = buildContainer();
+const { roleRouter, userRouter } = buildContainer();
 
 router.use("/health", healthRouter);
 router.use("/generate-token", generateTokenRouter)
 
 router.use("/roles", roleRouter.router);
+router.use("/users", userRouter.router);
 
 export default router;
