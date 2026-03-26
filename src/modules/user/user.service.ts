@@ -1,8 +1,8 @@
 import bcrypt from "bcrypt";
-import { UserRepo } from "./user.repo.js";
-import { LoginDto, User } from "./user.schema.js";
-import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema.js";
-import { generateToken } from "../../shared/utils/jwt.util.js";
+import { UserRepo } from "./user.repo";
+import { LoginDto, User } from "./user.schema";
+import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema";
+import { generateToken } from "../../shared/utils/jwt.util";
 
 const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key";
 

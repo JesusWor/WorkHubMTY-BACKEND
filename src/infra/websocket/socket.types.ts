@@ -1,5 +1,5 @@
 import { Server, Socket } from "socket.io";
-import { Notification } from "../../shared/types/notifications.types";
+import { Notification } from "../../modules/notifications/notifications.schema";
 
 export interface ServerToClientEvents {
   notification: (data: Notification) => void;

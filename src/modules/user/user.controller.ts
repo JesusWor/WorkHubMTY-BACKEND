@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { UserService } from "./user.service.js";
-import { LoginSchema } from "./user.schema.js";
-import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { UserService } from "./user.service";
+import { LoginSchema } from "./user.schema";
+import { GlobalResponse } from "../../shared/response/globalresponse";
 
 export type UserController = {
   login: (req: Request, res: Response) => Promise<void>;

@@ -1,5 +1,5 @@
-export { makeUserRepo } from "./user.repo.js";
-export { makeUserService } from "./user.service.js";
-export { makeUserController } from "./user.controller.js";
-export { makeUserRouter } from "./user.router.js";
-export * from "./user.schema.js";
+export { makeUserRepo } from "./user.repo";
+export { makeUserService } from "./user.service";
+export { makeUserController } from "./user.controller";
+export { makeUserRouter } from "./user.router";
+export * from "./user.schema";

@@ -1,11 +1,7 @@
 import { Router } from "express";
 import { UserController } from "./user.controller.js";
 
-export type UserRouter = {
-  router: Router;
-};
-
-export function makeUserRouter(controller: UserController): UserRouter {
+export function makeUserRouter(controller: UserController): Router {
   const router = Router();
 
   /**
@@ -40,5 +36,5 @@ export function makeUserRouter(controller: UserController): UserRouter {
    */
   router.post("/login", controller.login);
 
-  return { router };
+  return router;
 }
