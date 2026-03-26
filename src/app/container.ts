@@ -14,7 +14,7 @@ export function buildContainer(){
     const roleRouter = makeRoleRouter(roleController);
 
     const userRepo = makeUserRepo(db);
-    const userService = makeUserService(userRepo);
+    const userService = makeUserService(userRepo, roleRepo);
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController);
     

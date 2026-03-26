@@ -6,6 +6,7 @@ export type UserRepo = {
     getById: (eId: string) => Promise<User | null>;
 
     getAllByName: (name: string) => Promise<User[]>;
+    TEMPORARY_CREATE: (eId:string, name:string, email:string, hashedPassword:string, roleId:number) => Promise<User>;
 }
 
 export function makeUserRepo(db: Db): UserRepo {
@@ -56,9 +57,32 @@ export function makeUserRepo(db: Db): UserRepo {
         return rows as User[];
     };
 
+    const TEMPORARY_CREATE = async (eId:string, name:string, email:string, hashedPassword:string, roleId:number) => {
+        const { affectedCount, insertId } = await db.execute(`
+            INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
+            VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
+        
+        if(!affectedCount){
+            throw new Error('No se insertó insertó el usuario');
+        }
+
+        if(!insertId){
+            throw new Error('No se insertó el usuario')
+        }
+
+        const {rows} = await db.query(`
+            SELECT *
+            FROM users
+            WHERE id = ?`, [insertId]);
+
+        return rows[0];
+        
+    };
+
     return {
         getAll,
         getById,
-        getAllByName
+        getAllByName,
+        TEMPORARY_CREATE
     }
 }

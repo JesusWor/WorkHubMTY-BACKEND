@@ -3,6 +3,7 @@ import { Role, UpdateRole, CreateRole } from "./role.schema.js";
 
 export type RoleRepo = {
     getAll : () => Promise<Role[]>;
+    getByName : (name : string) => Promise<Role[]>;
     getById : (id: number) => Promise<Role | null>;
     create : (role: CreateRole) => Promise<Role | null>;
     update : (id: number, role: UpdateRole) => Promise<Role | null>;
@@ -12,6 +13,14 @@ export type RoleRepo = {
 export function makeRoleRepo(db : Db): RoleRepo {
     const getAll = async (): Promise<Role[]> => {
         const { rows } = await db.query("SELECT * FROM roles");
+        return rows as Role[];
+    }
+    const getByName = async (name : string ): Promise<Role[]> => {
+        const { rows } = await db.query(`
+            SELECT * 
+            FROM roles
+            WHERE name = ?
+            `, [name]);
         return rows as Role[];
     }
 
@@ -63,6 +72,7 @@ export function makeRoleRepo(db : Db): RoleRepo {
 
     return {
         getAll,
+        getByName,
         getById,
         create,
         update,
