@@ -8,8 +8,10 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
-// export const CreateUserSchema = UserSchema;
-// export type CreateUser = z.infer<typeof CreateUserSchema>;
+export const CreateUserSchema = UserSchema.extend({
+    password: z.string()
+});
+export type CreateUser = z.infer<typeof CreateUserSchema>;
 
 // export const UpdateUserSchema = UserSchema.partial().pick({ name: true, email: true, roleName: true });
 // export type UpdateUser = z.infer<typeof UpdateUserSchema>;

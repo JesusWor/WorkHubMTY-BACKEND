@@ -7,7 +7,7 @@ const app = express();
 app.use(cors()); 
 app.use(express.json());
 
-const { roleRouter, userRouter, notificationRouter } = buildContainer();
+const { roleRouter, userRouter, notificationRouter, authRouter } = buildContainer();
 
 const router = Router();
 
@@ -19,6 +19,7 @@ router.use("/health", (req, res) => {
 router.use("/users", userRouter.router);
 router.use("notifications", notificationRouter);
 router.use("/roles", roleRouter);
+router.use("/auth/", authRouter)
 
 
 app.use("/api", router);

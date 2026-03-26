@@ -11,8 +11,9 @@ export function makeAuthRepo(db: Db): AuthRepo {
             `SELECT
                 e_id as eId,
                 password_hash as passwordHash,
-                role_name as roleName
-             FROM users
+                r.name as roleName
+             FROM users u
+             JOIN roles r ON u.role_id = r.id
              WHERE
                 e_id = ?`,
             [eId]
