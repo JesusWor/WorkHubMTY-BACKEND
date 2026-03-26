@@ -1,7 +1,6 @@
 import { UserRepo } from "./user.repo";
 import { User } from "./user.schema";
 
-
 export type UserService = {
     getAll : () => Promise<User[]>;
     getById : (eId: string) => Promise<User | null>;
