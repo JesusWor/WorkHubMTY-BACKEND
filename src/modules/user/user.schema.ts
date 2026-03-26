@@ -1,17 +1,15 @@
 import { z } from "zod";
 
-export const LoginSchema = z.object({
-  e_id: z.string().min(1, "El e_id es requerido").max(8, "El e_id no puede superar 8 caracteres"),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+export const UserSchema = z.object({
+    eId: z.string(),
+    name: z.string(),
+    email: z.email(),
+    roleName: z.string()
 });
+export type User = z.infer<typeof UserSchema>;
 
-export type LoginDto = z.infer<typeof LoginSchema>;
+// export const CreateUserSchema = UserSchema;
+// export type CreateUser = z.infer<typeof CreateUserSchema>;
 
-export type User = {
-  e_id: string;
-  username: string;
-  email: string;
-  password: string;
-  role_id: number;
-  create_time: Date;
-};
+// export const UpdateUserSchema = UserSchema.partial().pick({ name: true, email: true, roleName: true });
+// export type UpdateUser = z.infer<typeof UpdateUserSchema>;

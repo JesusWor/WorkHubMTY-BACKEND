@@ -1,34 +1,30 @@
-import bcrypt from "bcrypt";
 import { UserRepo } from "./user.repo";
-import { LoginDto, User } from "./user.schema";
-import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema";
-import { generateToken } from "../../shared/utils/jwt.util";
+import { User } from "./user.schema";
 
-const JWT_SECRET = process.env.JWT_SECRET || "super_secret_key";
 
 export type UserService = {
-  login: (dto: LoginDto) => Promise<{ token: string; user: Omit<User, "password"> }>;
-};
+    getAll : () => Promise<User[]>;
+    getById : (eId: string) => Promise<User | null>;
 
-export function makeUserService(userRepo: UserRepo): UserService {
-  const login = async ({ e_id, password }: LoginDto) => {
-    const user = await userRepo.findByEId(e_id);
-    if (!user) throw new Error("Credenciales inválidas");
+    getAllByName: (name: string) => Promise<User[]>;
+}
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) throw new Error("Credenciales inválidas");
+export function makeUserService(repo: UserRepo): UserService {
+    const getAll = async (): Promise<User[]> => {
+        return await repo.getAll();
+    }
 
-    const payload: JwtPayload= {
-      userId: user.e_id,
-      email: user.password,
-      role: mapRole(user.role_id.toString())
-    };
+    const getById = async (eId: string): Promise<User | null> => {
+        return await repo.getById(eId);
+    }
 
-    const token = generateToken(payload);
-
-    const { password: _, ...userWithoutPassword } = user;
-    return { token, user: userWithoutPassword };
-  };
-
-  return { login };
+    const getAllByName = async (name: string) : Promise<User[]> => {
+        return await repo.getAllByName(name);
+    }
+    
+    return {
+        getAll,
+        getById,
+        getAllByName
+    }
 }
