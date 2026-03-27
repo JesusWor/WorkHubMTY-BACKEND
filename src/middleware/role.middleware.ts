@@ -1,16 +1,24 @@
 import { Request, Response, NextFunction } from "express";
 import { GlobalResponse } from "../shared/response/globalresponse";
-import { Roles } from "../shared/schemas/auth.schema";
+import { Roles } from "../shared/types/role.type";
 
-export const roleMiddleware = (...requiredRoles: Roles[]) => {
+export type RolePolicy = {
+    allow?: Roles[];
+    deny?: Roles[];
+};
+
+export const roleMiddleware = (policy: RolePolicy) => {
     return (req: Request, res: Response, next: NextFunction) => {
-        if (requiredRoles.length === 0) return next();
-
         if (!req.user) {
             return GlobalResponse.unauthorized(res);
         }
-        
-        if(!requiredRoles.includes(req.user.role)) {
+
+        const userRole = req.user.role;
+
+        if (policy.deny?.includes(userRole)) {
+            return GlobalResponse.forbidden(res);
+        }
+        if (policy.allow && !policy.allow.includes(userRole)) {
             return GlobalResponse.forbidden(res);
         }
 
