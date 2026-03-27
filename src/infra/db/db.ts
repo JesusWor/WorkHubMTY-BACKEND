@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 // import { Pool } from 'pg'
-import { config } from '../../config/env';
+import { env } from '../../config/env';
 
 export type Db = {
     query : (text: string, params?: any[]) => Promise< {rows : any[]}>;
@@ -9,16 +9,16 @@ export type Db = {
     testConnection : () => Promise<void>;
 };
 
-const { dbConfig } = config;
+const { db: dbEnv } = env
 
 export function createDb() : Db {
     const pool = mysql.createPool({
-        host: dbConfig.db_host,
-        user: dbConfig.db_user,
-        password: dbConfig.db_password,
-        database: dbConfig.db_name,
-        port: dbConfig.db_port,
-        connectionLimit: dbConfig.db_connection_limit
+        host: dbEnv.host,
+        user: dbEnv.user,
+        password: dbEnv.password,
+        database: dbEnv.name,
+        port: dbEnv.port,
+        connectionLimit: dbEnv.connectionLimit
     });
 
     return {

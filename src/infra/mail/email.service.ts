@@ -1,22 +1,22 @@
 import nodemailer from "nodemailer";
-import { config } from "../../config/env";
-import { SendEmailDTO } from "../../shared/types/email.types";
+import { env } from "../../config/env";
+import { SendEmailDTO } from "./email.types";
 
 export class EmailService {
 
   private static transporter = nodemailer.createTransport({
-    host: config.smtpConfig.smtp_host,
-    port: config.smtpConfig.smtp_port,
+    host: env.mail.host,
+    port: env.mail.port,
     auth: {
-      user: config.smtpConfig.smtp_user,
-      pass: config.smtpConfig.smtp_pass
+      user: env.mail.user,
+      pass: env.mail.pass
     }
   });
 
   static async sendEmail(data: SendEmailDTO) {
 
     await this.transporter.sendMail({
-      from: `"WorkHub" <${config.smtpConfig.smtp_user}>`,
+      from: `"WorkHub" <${env.mail.user}>`,
       to: data.to,
       subject: data.subject,
       html: data.html
