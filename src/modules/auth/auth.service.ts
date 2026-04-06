@@ -1,7 +1,9 @@
 import bcrypt from "bcrypt";
 import { AuthRepo } from "./auth.repo";
 import { UserAuth, LoginDto } from "./auth.schema";
-import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema";
+// import { JwtPayload, mapRole } from "../../shared/schemas/auth.schema";
+import { JwtPayload } from "../../shared/schemas/auth.schema";
+import { mapRole } from "../../shared/utils/role.util"
 import { generateToken } from "../../shared/utils/jwt.util";
 
 export type AuthService = {
