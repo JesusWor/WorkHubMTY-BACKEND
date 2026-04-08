@@ -1,5 +1,5 @@
-import { Db } from "../../infra/db/db.js";
-import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema.js";
+import { Db } from "../../infra/db/db";
+import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema";
 
 export type FriendshipRepo = {
     // Friendships
@@ -13,30 +13,30 @@ export type FriendshipRepo = {
     getSentRequests: (eId: string) => Promise<FriendRequest[]>;
     createRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
     removeRequest: (user1: string, user2: string) => Promise<boolean>;
-
-}
+};
 
 export function makeFriendshipRepo(db: Db): FriendshipRepo {
+
     const getAll = async (): Promise<Friendship[]> => {
         const { rows } = await db.query(`
             SELECT
-                user_low as userLow,
-                user_high as userHigh,
-                source
-                create_time as createdAt,
+                user_low AS userLow,
+                user_high AS userHigh,
+                source,
+                create_time AS createdAt
             FROM friendships
         `);
         return rows as Friendship[];
-    }
+    };
 
     const getFriendsOf = async (eId: string): Promise<FriendDTO[]> => {
         const { rows } = await db.query(`
             SELECT
-                u.e_id as userId,
-                u.name as name,
-                u.email as email,
-                f.create_time as createdAt
-            FORM friendships f
+                u.e_id AS userId,
+                u.name AS name,
+                u.email AS email,
+                f.create_time AS createdAt
+            FROM friendships f
             JOIN users u
                 ON (
                     (f.user_low = ? AND u.e_id = f.user_high)
@@ -44,70 +44,112 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
                     (f.user_high = ? AND u.e_id = f.user_low)
                 )
             WHERE f.user_low = ? OR f.user_high = ?
-        `, []);
+        `, [eId, eId, eId, eId]);
         return rows as FriendDTO[];
-    }
+    };
 
     const createFriendship = async (userLow: string, userHigh: string, source: Source): Promise<Friendship | null> => {
-        return null;
-    }
+        const { rows: existing } = await db.query(`
+            SELECT user_low FROM friendships
+            WHERE user_low = ? AND user_high = ?
+        `, [userLow, userHigh]);
+
+        if (existing.length > 0) return null;
+
+        await db.query(`
+            INSERT INTO friendships (user_low, user_high, source)
+            VALUES (?, ?, ?)
+        `, [userLow, userHigh, source]);
+
+        const { rows } = await db.query(`
+            SELECT
+                user_low AS userLow,
+                user_high AS userHigh,
+                source,
+                create_time AS createdAt
+            FROM friendships
+            WHERE user_low = ? AND user_high = ?
+        `, [userLow, userHigh]);
+
+        return rows.length > 0 ? (rows[0] as Friendship) : null;
+    };
 
     const removeFriendship = async (userLow: string, userHigh: string): Promise<boolean> => {
-        return false;
-    }
+        const { rows } = await db.query(`
+            DELETE FROM friendships
+            WHERE user_low = ? AND user_high = ?
+        `, [userLow, userHigh]);
+
+        return (rows as any).affectedRows > 0;
+    };
 
     const getReceivedRequests = async (eId: string): Promise<FriendRequest[]> => {
         const { rows } = await db.query(`
             SELECT
-                from_user as fromUser,
-                to_user as toUser,
-                create_time as createdAt
+                from_user AS fromUser,
+                to_user AS toUser,
+                create_time AS createdAt
             FROM friend_requests
             WHERE to_user = ?
-        `, [eId])
+        `, [eId]);
         return rows as FriendRequest[];
-    }
+    };
 
     const getSentRequests = async (eId: string): Promise<FriendRequest[]> => {
         const { rows } = await db.query(`
             SELECT
-                from_user as fromUser,
-                to_user as toUser,
-                create_time as createdAt
+                from_user AS fromUser,
+                to_user AS toUser,
+                create_time AS createdAt
             FROM friend_requests
             WHERE from_user = ?
-        `, [eId])
+        `, [eId]);
         return rows as FriendRequest[];
-    }
+    };
 
     const createRequest = async (fromUser: string, toUser: string): Promise<FriendRequest | null> => {
+        const { rows: existing } = await db.query(`
+            SELECT from_user FROM friend_requests
+            WHERE from_user = ? AND to_user = ?
+        `, [fromUser, toUser]);
 
-    }
+        if (existing.length > 0) return null;
+
+        await db.query(`
+            INSERT INTO friend_requests (from_user, to_user)
+            VALUES (?, ?)
+        `, [fromUser, toUser]);
+
+        const { rows } = await db.query(`
+            SELECT
+                from_user AS fromUser,
+                to_user AS toUser,
+                create_time AS createdAt
+            FROM friend_requests
+            WHERE from_user = ? AND to_user = ?
+        `, [fromUser, toUser]);
+
+        return rows.length > 0 ? (rows[0] as FriendRequest) : null;
+    };
 
     const removeRequest = async (user1: string, user2: string): Promise<boolean> => {
+        const { rows } = await db.query(`
+            DELETE FROM friend_requests
+            WHERE (from_user = ? AND to_user = ?)
+               OR (from_user = ? AND to_user = ?)
+        `, [user1, user2, user2, user1]);
 
-    }
-
+        return (rows as any).affectedRows > 0;
+    };
 
     return {
-
-    }
-}
-
-const getAll = async (): Promise<Role[]> => {
-    const { rows } = await db.query("SELECT * FROM roles");
-    return rows as Role[];
-}
-
-const getById = async (id: number): Promise<Role | null> => {
-    const { rows } = await db.query("SELECT * FROM roles WHERE id = ?", [id]);
-    return rows.length > 0 ? rows[0] : null;
-}
-
-const create = async (role: CreateRole): Promise<Role | null> => {
-    const { insertId } = await db.execute("INSERT INTO roles (name) VALUES (?)", [role.name]);
-
-    if (!insertId) return null;
-
-    return await getById(insertId);
+        getAll,
+        getFriendsOf,
+        createFriendship,
+        removeFriendship,
+        getReceivedRequests,
+        getSentRequests,
+        createRequest,
+        removeRequest,
+    };
 }
