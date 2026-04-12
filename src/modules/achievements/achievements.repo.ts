@@ -84,12 +84,12 @@ export function makeAchivementsRepo(db: Db): AchievementsRepo {
         const [[reservations]]: any = await db.query(`
             SELECT COUNT(*) AS total
             FROM reservations
-            WEHERE user_id = ?
+            WHERE user_id = ?
         `, [userId]);
         const [[friends]]: any = await db.query(`
             SELECT COUNT(*) AS total
             FROM friends
-            WEHERE {user_low = ? AND user_high = ?}
+            WHERE {user_low = ? AND user_high = ?}
             AND status = 'accepted'
         `, [userId, userId]);
 

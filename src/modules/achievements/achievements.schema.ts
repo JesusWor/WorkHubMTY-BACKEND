@@ -9,5 +9,5 @@ export const AchivementsSchema = z.object({
 
 export type Achievements = z.infer<typeof AchivementsSchema>;
 
-    // export const UpdateAchivementSchema = AchivementsSchema.partial().pick({ name: true });
-    // export type UpdateAchievements = z.infer<typeof UpdateAchivementSchema>;
+// export const UpdateAchivementSchema = AchivementsSchema.partial().pick({ name: true });
+// export type UpdateAchievements = z.infer<typeof UpdateAchivementSchema>;
