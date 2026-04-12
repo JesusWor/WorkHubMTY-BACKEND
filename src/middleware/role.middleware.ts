@@ -7,7 +7,7 @@ export type RolePolicy = {
     deny?: Roles[];
 };
 
-export const roleMiddleware = (policy: RolePolicy) => {
+export const authorize = (policy: RolePolicy) => {
     return (req: Request, res: Response, next: NextFunction) => {
         if (!req.user) {
             return GlobalResponse.unauthorized(res);
