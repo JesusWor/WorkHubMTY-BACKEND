@@ -8,6 +8,7 @@ import { generateToken } from "../../shared/utils/jwt.util";
 
 export type AuthService = {
     login: (dto: LoginDto) => Promise<string>;
+    
 };
 
 export function makeAuthService(repo: AuthRepo): AuthService {

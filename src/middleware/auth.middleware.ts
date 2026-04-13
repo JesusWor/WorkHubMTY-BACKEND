@@ -3,14 +3,12 @@ import { verifyToken } from "../shared/utils/jwt.util";
 import { GlobalResponse } from "../shared/response/globalresponse";
 import { JwtPayloadSchema } from "../shared/schemas/auth.schema"
 
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
+export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+  const token = req.cookies?.token;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!token) {
     return GlobalResponse.unauthorized(res);
   }
-
-  const token = authHeader.split(" ")[1];
 
   try {
     const decoded = verifyToken(token);
