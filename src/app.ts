@@ -15,12 +15,13 @@ router.use("/health", (req, res) => {
   })
 });
 
-const { roleRouter, userRouter, notificationRouter, authRouter } = buildContainer();
+const { roleRouter, userRouter, notificationRouter, authRouter, friendshipRouter } = buildContainer();
 
 router.use("/users", userRouter);
 router.use("/notifications", notificationRouter);
 router.use("/roles", roleRouter);
-router.use("/auth", authRouter)
+router.use("/auth", authRouter);
+router.use("/friendships", friendshipRouter);
 
 
 app.use("/api", router);

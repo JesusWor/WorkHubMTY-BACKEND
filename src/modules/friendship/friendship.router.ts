@@ -2,11 +2,7 @@ import { Router } from "express";
 import { FriendshipController } from "./friendship.controller";
 import { authenticate, authorize, Roles } from "../../middleware";
 
-export type FriendshipRouter = {
-    router: Router;
-}
-
-export function makeFriendshipRouter(controller: FriendshipController): FriendshipRouter {
+export function makeFriendshipRouter(controller: FriendshipController): Router {
     const router = Router();
 
     router.get("/", authenticate, authorize({ allow: [Roles.ADMIN]}), controller.getAll);
@@ -22,6 +18,5 @@ export function makeFriendshipRouter(controller: FriendshipController): Friendsh
     router.post("/requests", authenticate, authorize({allow: [Roles.ADMIN, Roles.USER]}), controller.createRequest);
     router.delete("/requests", authenticate, authorize({allow: [Roles.ADMIN, Roles.USER]}), controller.removeRequest);
 
-
-    return { router }
+    return router;
 }
