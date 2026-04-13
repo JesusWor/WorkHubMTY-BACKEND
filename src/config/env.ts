@@ -1,9 +1,22 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+const VALID_NODE_ENVS = ['development', 'production', 'test'] as const;
+
+type NodeEnv = typeof VALID_NODE_ENVS[number];
+
+function resolveNodeEnv(env?: string): NodeEnv {
+  if (VALID_NODE_ENVS.includes(env as NodeEnv)) {
+    return env as NodeEnv;
+  }
+
+  return 'production';
+}
+
 export const env = {
     server: {
         port: process.env.PORT ? parseInt(process.env.PORT) : 5000,
+        nodeEnv: resolveNodeEnv(process.env.NODE_ENV),
     },
     db: {
         host: process.env.DB_HOST || '',

@@ -1,5 +1,6 @@
 import { AchievementsRepo } from "./achievements.repo";
 import { Achievements, CreateAchievementInput } from "./achievements.schema";
+import { BadRequestError, ConflictError } from "../../shared/errors/AppError";
 
 export type AchievementsService = {
     getAll: () => Promise<Achievements[]>;
@@ -27,12 +28,10 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getByCode(code);
     };
 
-    // NEW
     const createAchievement = async (input: CreateAchievementInput): Promise<{ id: number }> => {
-        // Verificar que el code no esté ya en uso
         const existing = await repo.getByCode(input.code);
         if (existing) {
-            throw new Error(`Ya existe un logro con el código "${input.code}"`);
+            throw new ConflictError(`Ya existe un logro con el código "${input.code}"`);
         }
 
         return await repo.createAchievement(input);
@@ -43,16 +42,9 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         achievementId: number,
         increment: number
     ): Promise<void> => {
-        if (!userId) {
-            throw new Error("The user is required");
-        }
-        if (!achievementId) {
-            throw new Error("Achievement id is required");
-        }
-        // FIX: "incerment" -> "increment"
-        if (increment <= 0) {
-            throw new Error("The increment has to be more than 0");
-        }
+        if (!userId) throw new BadRequestError("The user is required");
+        if (!achievementId) throw new BadRequestError("Achievement id is required");
+        if (increment <= 0) throw new BadRequestError("The increment has to be more than 0");
 
         await repo.updateAchievements(userId, achievementId, increment);
     };
@@ -69,7 +61,6 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getUserStats(userId);
     };
 
-    // NEW
     const getRecentActivity = async (userId: string): Promise<any> => {
         return await repo.getRecentActivity(userId);
     };

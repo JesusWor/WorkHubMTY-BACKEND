@@ -1,6 +1,7 @@
 import express, { Router } from "express";
 import cors from "cors";
 import { buildContainer } from "./app/container";
+import { errorHandler } from "./middleware";
 
 const app = express();
 
@@ -25,6 +26,8 @@ router.use("/friendships", friendshipRouter);
 
 
 app.use("/api", router);
+
+app.use(errorHandler);
 
 
 export default app;

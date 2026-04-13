@@ -1,5 +1,5 @@
-import { Response } from "express";
-import { ZodError } from "zod";
+import { Response } from 'express';
+import { ZodError } from 'zod';
 
 export class PaginationInfo {
   totalItems: number;
@@ -20,16 +20,20 @@ export class PaginationInfo {
 }
 
 export class GlobalResponse {
-  static ok(res: Response, message = "Operación exitosa") {
+  static ok(res: Response, message = 'Operación exitosa') {
     return res.status(200).json({ success: true, message });
   }
 
-  static okWithData<T>(res: Response, data: T, message = "Operación exitosa") {
+  static okWithData<T>(res: Response, data: T, message = 'Operación exitosa') {
     return res.status(200).json({ success: true, message, data });
   }
 
-  static created<T>(res: Response, data: T, message = "Recurso creado exitosamente") {
+  static created<T>(res: Response, data: T, message = 'Recurso creado exitosamente') {
     return res.status(201).json({ success: true, message, data });
+  }
+
+  static okNoContent(res: Response, message = 'Operación exitosa') {
+    return res.status(204).json({ success: true, message });
   }
 
   static okPaginated<T>(
@@ -38,7 +42,7 @@ export class GlobalResponse {
     totalItems: number,
     currentPage: number,
     pageSize: number,
-    message = "Datos obtenidos exitosamente"
+    message = 'Datos obtenidos exitosamente',
   ) {
     const pagination = new PaginationInfo(totalItems, currentPage, pageSize);
     return res.status(200).json({ success: true, message, data, pagination });
@@ -48,31 +52,31 @@ export class GlobalResponse {
     return res.status(statusCode).json({ success: false, message });
   }
 
-  static badRequest(res: Response, message = "Solicitud incorrecta") {
+  static badRequest(res: Response, message = 'Solicitud incorrecta') {
     return this.fail(res, message, 400);
   }
 
-  static unauthorized(res: Response, message = "No autorizado") {
+  static unauthorized(res: Response, message = 'No autorizado') {
     return res.status(401).json({ success: false, message });
   }
 
-  static forbidden(res: Response, message = "Permisos insuficientes") {
+  static forbidden(res: Response, message = 'Permisos insuficientes') {
     return res.status(403).json({ success: false, message });
   }
-  
-  static notFound(res: Response, message = "Recurso no encontrado") {
+
+  static notFound(res: Response, message = 'Recurso no encontrado') {
     return res.status(404).json({ success: false, message });
   }
 
-  static serverError(res: Response, message = "Error interno del servidor") {
+  static serverError(res: Response, message = 'Error interno del servidor') {
     return res.status(500).json({ success: false, message });
   }
 
   static zodError(res: Response, error: ZodError) {
     const errors = error.issues.map((e) => ({
-      field: e.path.map(String).join("."),
+      field: e.path.map(String).join('.'),
       message: e.message,
     }));
-    return res.status(422).json({ success: false, message: "Validation failed", errors });
+    return res.status(422).json({ success: false, message: 'Validation failed', errors });
   }
 }
