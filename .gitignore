@@ -1,8 +1,26 @@
-# Backend
+# dependencies
 node_modules/
-dist
 
-.env
-**/.env
-config/env.ts
+# build
+dist/
+coverage/
+
+# env files
+.env*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# system
+.DS_Store
+
+# prisma generated
 /src/generated/prisma
+
+# typescript
+*.tsbuildinfo

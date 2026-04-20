@@ -13,7 +13,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
   try {
     const decoded = verifyToken(token);
     const parsed = JwtPayloadSchema.parse(decoded);
-    req.user = decoded;
+    req.user = parsed;
     return next();
   } catch (error) {
     return GlobalResponse.unauthorized(res);
