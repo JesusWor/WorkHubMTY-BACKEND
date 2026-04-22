@@ -1,42 +1,71 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// dotenv.config() was intentionally removed from here.
+// Each entrypoint is responsible for loading the correct .env file:
+//   - server.ts        → import 'dotenv/config'                    (development / production)
+//   - globalSetup.ts   → dotenv.config({ path: '.env.test' })      (test)
 
 const VALID_NODE_ENVS = ['development', 'production', 'test'] as const;
 
 type NodeEnv = typeof VALID_NODE_ENVS[number];
 
-function resolveNodeEnv(env?: string): NodeEnv {
-  if (VALID_NODE_ENVS.includes(env as NodeEnv)) {
-    return env as NodeEnv;
-  }
-
-  return 'production';
+// Fail-fast helpers
+function requireString(key: string): string {
+    const value = process.env[key];
+    if (!value || value.trim() === '') {
+        console.error(`[env] Missing required environment variable: ${key}`);
+        process.exit(1);
+    }
+    return value;
 }
 
+function requireInt(key: string, fallback?: number): number {
+    const value = process.env[key];
+    if (!value || value.trim() === '') {
+        if (fallback !== undefined) return fallback;
+        console.error(`[env] Missing required environment variable: ${key}`);
+        process.exit(1);
+    }
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+        console.error(`[env] Environment variable ${key} must be a valid integer, got: "${value}"`);
+        process.exit(1);
+    }
+    return parsed;
+}
+
+function resolveNodeEnv(value?: string): NodeEnv {
+    if (VALID_NODE_ENVS.includes(value as NodeEnv)) {
+        return value as NodeEnv;
+    }
+    return 'production';
+}
+
+/*
+env — validated at import time
+*/
 export const env = {
     server: {
-        port: process.env.PORT ? parseInt(process.env.PORT) : 5000,
+        port: requireInt('PORT', 5000),
         nodeEnv: resolveNodeEnv(process.env.NODE_ENV),
     },
     db: {
-        host: process.env.DB_HOST || '',
-        port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
-        user: process.env.DB_USER || '',
-        password: process.env.DB_PASSWORD || '',
-        name: process.env.DB_NAME || '',
-        connectionLimit: process.env.DB_CONNECTION_LIMIT ? parseInt(process.env.DB_CONNECTION_LIMIT) : 10,
+        host: requireString('DB_HOST'),
+        port: requireInt('DB_PORT', 3306),
+        user: requireString('DB_USER'),
+        password: requireString('DB_PASSWORD'),
+        name: requireString('DB_NAME'),
+        connectionLimit: requireInt('DB_CONNECTION_LIMIT', 10),
     },
     redis: {
-        host: process.env.REDIS_HOST || '',
-        port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
+        host: requireString('REDIS_HOST'),
+        port: requireInt('REDIS_PORT', 6379),
     },
     auth: {
-        jwtSecret: process.env.JWT_SECRET || '',
+        jwtSecret: requireString('JWT_SECRET'),
     },
     mail: {
-        host: process.env.SMTP_HOST || '',
-        port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : 587,
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
+        host: requireString('SMTP_HOST'),
+        port: requireInt('SMTP_PORT', 587),
+        user: requireString('SMTP_USER'),
+        pass: requireString('SMTP_PASS'),
     },
 };
