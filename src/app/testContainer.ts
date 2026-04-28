@@ -6,6 +6,8 @@ import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } fro
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role';
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship';
 import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications';
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots";
+import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots";
 
 /**
  * Fake authenticate middleware — only for tests
@@ -64,6 +66,16 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const friendshipController = makeFriendshipController(friendshipService);
   const friendshipRouter = makeFriendshipRouter(friendshipController);
 
+  const officeSlotsRepo = makeOfficeSlotsRepo(db);
+  const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo);
+  const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
+  const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
+
+  const parkingSlotsRepo = makeParkingSlotsRepo(db);
+  const parkingSlotsService = makeParkingSlotsService(parkingSlotsRepo);
+  const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
+  const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
+
   return {
     db,
     authRouter,
@@ -71,6 +83,8 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     userRouter,
     notificationRouter,
     friendshipRouter,
+    officeSlotsRouter,
+    parkingSlotsRouter,
     fakeAuthenticate,
   };
 }

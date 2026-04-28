@@ -48,6 +48,26 @@ const seeders: { [K in SeedTable]: (conn: mysql.Connection) => Promise<void> } =
             );
         }
     },
+
+    parking_lots: async (conn) => {
+        for (const lot of seed.parking_lots) {
+            await conn.query(
+                `INSERT INTO parking_lots (id, name, capacity) VALUES (?, ?, ?)`,
+                [lot.id, lot.name, lot.capacity]
+            );
+        }
+    },
+ 
+    parking_reservations: async (conn) => {
+        for (const res of seed.parking_reservations) {
+            await conn.query(
+                `INSERT INTO parking_reservations
+                    (id, parking_lot_id, user_id, start_time, end_time, checked_in)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [res.id, res.parking_lot_id, res.user_id, res.start_time, res.end_time, res.checked_in]
+            );
+        }
+    },
 };
 
 export async function resetTables(

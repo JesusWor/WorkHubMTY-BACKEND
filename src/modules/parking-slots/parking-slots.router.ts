@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { ParkingController } from "./parking.controller";
+import { ParkingSlotsController } from "./parking-slots.controller";
 import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware";
 
-export function makeParkingRouter(controller: ParkingController): Router {
+export function makeParkingSlotsRouter(controller: ParkingSlotsController): Router {
     const router = Router();
 
     const SUPERVISOR_POLICY: RolePolicy = { allow: [Roles.ADMIN] };
