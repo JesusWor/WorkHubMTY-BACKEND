@@ -4,6 +4,8 @@ import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } fro
 import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from "../modules/user";
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship";
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots";
+import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots";
 
 export function buildContainer() {
     const db = createDb();
@@ -33,5 +35,15 @@ export function buildContainer() {
     const friendshipController = makeFriendshipController(friendshipService);
     const friendshipRouter = makeFriendshipRouter(friendshipController);
 
-    return { roleRouter, userRouter, notificationRouter, authRouter, friendshipRouter };
+    const officeSlotsRepo = makeOfficeSlotsRepo(db);
+    const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo);
+    const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
+    const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
+
+    const parkingSlotsRepo = makeParkingSlotsRepo(db);
+    const parkingSlotsService = makeParkingSlotsService(parkingSlotsRepo);
+    const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
+    const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
+
+    return { roleRouter, userRouter, notificationRouter, authRouter, friendshipRouter, officeSlotsRouter, parkingSlotsRouter };
 };

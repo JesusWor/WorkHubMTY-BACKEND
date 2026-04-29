@@ -9,6 +9,8 @@ export type AppContainer = {
   userRouter: Router;
   notificationRouter: Router;
   friendshipRouter: Router;
+  officeSlotsRouter: Router;
+  parkingSlotsRouter: Router;
 };
 
 export function createApp(container: AppContainer) {
@@ -29,6 +31,9 @@ export function createApp(container: AppContainer) {
   router.use('/roles', container.roleRouter);
   router.use('/auth', container.authRouter);
   router.use('/friendships', container.friendshipRouter);
+
+  router.use('/reservations', container.officeSlotsRouter);
+  router.use('/parking', container.parkingSlotsRouter);
 
   app.use('/api', router);
   app.use(errorHandler);
