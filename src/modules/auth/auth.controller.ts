@@ -2,15 +2,19 @@ import { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { LoginSchema } from "./auth.schema";
 import { GlobalResponse } from "../../shared/response/globalresponse";
-import { AppError } from "../../shared/errors/AppError";
+import { verifyToken } from "../../shared/utils/jwt.util";
+import { UnauthorizedError } from "../../shared/errors/AppError";
 import { env } from "../../config/env"
 
 const { nodeEnv } = env.server;
 
 const isProd = nodeEnv === 'production';
 
+const HOUR_MS = 1000 * 60 * 60;
+
 export type AuthController = {
     login: (req: Request, res: Response) => Promise<void>;
+    me: (req: Request, res: Response) => Promise<void>;
     logout: (req: Request, res: Response) => Promise<void>;
 };
 
@@ -22,17 +26,28 @@ export function makeAuthController(service: AuthService): AuthController {
             return;
         }
 
-        const token = await service.login(parsed.data);
+        const { token, user } = await service.login(parsed.data);
 
         res.cookie("token", token, {
             httpOnly: true,
             secure: isProd,
             sameSite: "strict",
-            maxAge: 1000 * 60 * 60 * 8
+            maxAge: HOUR_MS * 8
         });
 
-        GlobalResponse.ok(res, "Login exitoso");
+        GlobalResponse.okWithData(res, user, "Login exitoso");
     };
+
+    const me = async (req: Request, res: Response): Promise<void> => {
+        const token = req.cookies?.token;
+        if (!token) throw new UnauthorizedError("No autenticado");
+
+        const payload = verifyToken(token);
+        const user = await service.me(payload.eId);
+
+        GlobalResponse.okWithData(res, user, "Usuario autenticado");
+    };
+
 
     const logout = async (_req: Request, res: Response): Promise<void> => {
         res.clearCookie("token", {
@@ -45,6 +60,7 @@ export function makeAuthController(service: AuthService): AuthController {
 
     return {
         login,
+        me,
         logout
     };
 }

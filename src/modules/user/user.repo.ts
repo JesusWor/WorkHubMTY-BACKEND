@@ -63,11 +63,7 @@ export function makeUserRepo(db: Db): UserRepo {
             VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
         
         if(!affectedCount){
-            throw new Error('No se insertó insertó el usuario');
-        }
-
-        if(!insertId){
-            throw new Error('No se insertó el usuario')
+            throw new Error('No se insertó el usuario');
         }
 
         const {rows} = await db.query(`
