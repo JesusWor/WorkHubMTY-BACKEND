@@ -1,11 +1,11 @@
-import { createDb } from "../infra/db/db";
-import { makeNotificationRouter, makeNotificationController, makeNotificationService } from "../modules/notifications";
-import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role";
-import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from "../modules/user";
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth";
-import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship";
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots";
-import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots";
+import { createDb } from "../infra/db/db.js";
+import { makeNotificationRouter, makeNotificationController, makeNotificationService } from "../modules/notifications/index.js";
+import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
+import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from "../modules/user/index.js";
+import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
+import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
+import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
 export function buildContainer() {
     const db = createDb();

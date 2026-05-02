@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
-import { JwtPayloadSchema, JwtPayload } from "../schemas/auth.schema";
-import { AppError } from "../errors/AppError";
-import { env } from "../../config/env";
+import { JwtPayloadSchema, JwtPayload } from "../schemas/auth.schema.js";
+import { AppError } from "../errors/AppError.js";
+import { env } from "../../config/env.js";
 
 const SECRET = env.auth.jwtSecret;
 

@@ -1,6 +1,6 @@
-import { FriendshipRepo } from "./friendship.repo";
-import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema";
-import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError";
+import { FriendshipRepo } from "./friendship.repo.js";
+import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type FriendshipService = {
     getAll: () => Promise<Friendship[]>;

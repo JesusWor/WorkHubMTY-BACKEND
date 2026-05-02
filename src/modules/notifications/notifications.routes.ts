@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { NotificationController } from "./notifications.schema";
-import { asyncHandler } from "../../middleware";
+import { NotificationController } from "./notifications.schema.js";
+import { asyncHandler } from "../../middleware/index.js";
 
 export function makeNotificationRouter(notificationController: NotificationController): Router {
     const router = Router();

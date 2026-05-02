@@ -1,5 +1,5 @@
-export { makeFriendshipRepo } from "./friendship.repo";
-export { makeFriendshipService } from "./friendship.service";
-export { makeFriendshipController } from "./friendship.controller";
-export { makeFriendshipRouter } from "./friendship.router";
-export * from "./friendship.schema";
+export { makeFriendshipRepo } from "./friendship.repo.js";
+export { makeFriendshipService } from "./friendship.service.js";
+export { makeFriendshipController } from "./friendship.controller.js";
+export { makeFriendshipRouter } from "./friendship.router.js";
+export * from "./friendship.schema.js";

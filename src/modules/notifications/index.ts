@@ -1,3 +1,3 @@
-export { makeNotificationService } from "./notifications.service";
-export { makeNotificationController } from './notifications.controller'
-export { makeNotificationRouter } from './notifications.routes'
+export { makeNotificationService } from "./notifications.service.js";
+export { makeNotificationController } from './notifications.controller.js'
+export { makeNotificationRouter } from './notifications.routes.js'

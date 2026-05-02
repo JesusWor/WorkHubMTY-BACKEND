@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
-import { createApp } from './app';
-import { createDb } from '../infra/db/db';
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from '../modules/auth';
-import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from '../modules/user';
-import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role';
-import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship';
-import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications';
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots";
-import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots";
+import { createApp } from './app.js';
+import { createDb } from '../infra/db/db.js';
+import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from '../modules/auth/index.js';
+import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from '../modules/user/index.js';
+import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
+import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
+import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications/index.js';
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
+import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
 /**
  * Fake authenticate middleware — only for tests

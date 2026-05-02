@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { AchievementsController } from './achievements.controller';
-import { authenticate, authorize, Roles, asyncHandler } from "../../middleware";
+import { AchievementsController } from './achievements.controller.js';
+import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/index.js";
 
 export function makeAchievementsRouter(controller: AchievementsController): Router {
     const router = Router();

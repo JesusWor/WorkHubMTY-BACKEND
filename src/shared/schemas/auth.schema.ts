@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { mapRole } from "../utils/role.util"
+import { mapRole } from "../utils/role.util.js"
 
 const RoleSchema = z.string().transform((r) => mapRole(r));
 

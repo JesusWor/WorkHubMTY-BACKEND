@@ -1,6 +1,6 @@
 import { Server as HttpServer } from "http";
 import { Server } from "socket.io";
-import { TypedServer, TypedSocket } from "./socket.types";
+import { TypedServer, TypedSocket } from "./socket.types.js";
 
 let io: TypedServer;
 

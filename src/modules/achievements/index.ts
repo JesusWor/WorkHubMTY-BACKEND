@@ -1,5 +1,5 @@
-export { makeAchievementsRouter } from "./achievements.router";
-export { makeAchievementsController } from "./achievements.controller";
-export { makeAchievementsService } from "./achievements.service";
-export { makeAchievementsRepo } from "./achievements.repo";
-export * from "./achievements.schema";  
+export { makeAchievementsRouter } from "./achievements.router.js";
+export { makeAchievementsController } from "./achievements.controller.js";
+export { makeAchievementsService } from "./achievements.service.js";
+export { makeAchievementsRepo } from "./achievements.repo.js";
+export * from "./achievements.schema.js";  

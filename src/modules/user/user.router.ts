@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { UserController } from "./user.controller";
-import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware";
+import { UserController } from "./user.controller.js";
+import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware/index.js";
 
 export function makeUserRouter(controller: UserController): Router {
     const router = Router();

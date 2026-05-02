@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { AppError } from '../shared/errors/AppError';
-import { GlobalResponse } from '../shared/response/globalresponse';
-import { env } from "../config/env"
+import { AppError } from '../shared/errors/AppError.js';
+import { GlobalResponse } from '../shared/response/globalresponse.js';
+import { env } from "../config/env.js"
 
 const { nodeEnv } = env.server;
 

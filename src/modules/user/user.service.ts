@@ -1,8 +1,8 @@
-import { RoleRepo } from "../role/role.repo";
-import { UserRepo } from "./user.repo";
-import { User } from "./user.schema";
+import { RoleRepo } from "../role/role.repo.js";
+import { UserRepo } from "./user.repo.js";
+import { User } from "./user.schema.js";
 import bcrypt from "bcrypt";
-import { InternalError } from "../../shared/errors/AppError";
+import { InternalError } from "../../shared/errors/AppError.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;

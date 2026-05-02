@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
-import { getIO } from "../../infra/websocket/socket.server";
-import { NotificationService, Notification, UserRole } from "./notifications.schema";
+import { getIO } from "../../infra/websocket/socket.server.js";
+import { NotificationService, Notification, UserRole } from "./notifications.schema.js";
 
 export function makeNotificationService() : NotificationService{
 

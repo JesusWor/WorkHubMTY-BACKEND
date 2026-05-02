@@ -1,6 +1,6 @@
-import { AchievementsRepo } from "./achievements.repo";
-import { Achievements, CreateAchievementInput } from "./achievements.schema";
-import { BadRequestError, ConflictError } from "../../shared/errors/AppError";
+import { AchievementsRepo } from "./achievements.repo.js";
+import { Achievements, CreateAchievementInput } from "./achievements.schema.js";
+import { BadRequestError, ConflictError } from "../../shared/errors/AppError.js";
 
 export type AchievementsService = {
     getAll: () => Promise<Achievements[]>;

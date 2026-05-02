@@ -1,5 +1,5 @@
-import { Db } from "../../infra/db/db";
-import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema";
+import { Db } from "../../infra/db/db.js";
+import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema.js";
 
 export type FriendshipRepo = {
     // Friendships

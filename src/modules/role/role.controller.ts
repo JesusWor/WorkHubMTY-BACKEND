@@ -1,7 +1,7 @@
-import { RoleService } from "./role.service";
-import { CreateRoleSchema, UpdateRoleSchema } from "./role.schema";
+import { RoleService } from "./role.service.js";
+import { CreateRoleSchema, UpdateRoleSchema } from "./role.schema.js";
 import { Request, Response } from "express";
-import { GlobalResponse } from "../../shared/response/globalresponse";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 
 export type RoleController = {
     getAll: (req: Request, res: Response) => Promise<void>;

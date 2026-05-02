@@ -1,4 +1,4 @@
-import { JwtPayload } from "../schemas/auth.schema";
+import { JwtPayload } from "../schemas/auth.schema.js";
 
 declare global {
   namespace Express {

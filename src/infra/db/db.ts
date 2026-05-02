@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 // import { Pool } from 'pg'
-import { env } from '../../config/env';
+import { env } from '../../config/env.js';
 
 export type Db = {
     query : (text: string, params?: any[]) => Promise< {rows : any[]}>;

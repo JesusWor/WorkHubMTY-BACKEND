@@ -1,5 +1,5 @@
-import { Db } from "../../infra/db/db";
-import { CreateOfficeSlotBody, OfficeSlot, UpdateOfficeSlotBody, FriendOccupancy } from "./office-slots.schema";
+import { Db } from "../../infra/db/db.js";
+import { CreateOfficeSlotBody, OfficeSlot, UpdateOfficeSlotBody, FriendOccupancy } from "./office-slots.schema.js";
 
 export type OfficeSlotsRepo = {
   findAll:             (filters: { floor_id?: number }) => Promise<any[]>;

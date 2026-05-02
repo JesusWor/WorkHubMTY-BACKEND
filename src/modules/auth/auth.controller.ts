@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
-import { AuthService } from "./auth.service";
-import { LoginSchema } from "./auth.schema";
-import { GlobalResponse } from "../../shared/response/globalresponse";
-import { AppError } from "../../shared/errors/AppError";
-import { env } from "../../config/env"
+import { AuthService } from "./auth.service.js";
+import { LoginSchema } from "./auth.schema.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { AppError } from "../../shared/errors/AppError.js";
+import { env } from "../../config/env.js"
 
 const { nodeEnv } = env.server;
 
