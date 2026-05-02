@@ -5,6 +5,7 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../shared/erro
 export type FriendshipService = {
     getAll: () => Promise<Friendship[]>;
     getFriendsOf: (eId: string) => Promise<FriendDTO[]>;
+    areFriends: (user1: string, user2: string) => Promise<boolean>;
     createFriendship: (userLow: string, userHigh: string, source: Source) => Promise<Friendship | null>;
     removeFriendship: (user1: string, user2: string) => Promise<boolean>;
 
@@ -23,6 +24,12 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
     const getFriendsOf = async (eId: string): Promise<FriendDTO[]> => {
         if (!eId) throw new BadRequestError("User id is required");
         return await repo.getFriendsOf(eId);
+    };
+
+    const areFriends = async (user1: string, user2: string): Promise<boolean> => {
+        if (!user1 || !user2) throw new BadRequestError("Both user ids are required");
+        if (user1 === user2) return true;
+        return await repo.areFriends(user1, user2);
     };
 
     const createFriendship = async (user1: string, user2: string, source: Source): Promise<Friendship | null> => {
@@ -80,6 +87,7 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
     return {
         getAll,
         getFriendsOf,
+        areFriends,
         createFriendship,
         removeFriendship,
         getReceivedRequests,

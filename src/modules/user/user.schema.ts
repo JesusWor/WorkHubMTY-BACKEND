@@ -15,3 +15,9 @@ export type CreateUser = z.infer<typeof CreateUserSchema>;
 
 // export const UpdateUserSchema = UserSchema.partial().pick({ name: true, email: true, roleName: true });
 // export type UpdateUser = z.infer<typeof UpdateUserSchema>;
+
+export const ProfileSchema = UserSchema.extend({
+    friendCount: z.number(),
+    achievementCount:  z.number(),
+})
+export type Profile = z.infer<typeof ProfileSchema>;

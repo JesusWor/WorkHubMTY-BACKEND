@@ -5,6 +5,7 @@ export type FriendshipRepo = {
     // Friendships
     getAll: () => Promise<Friendship[]>;
     getFriendsOf: (eId: string) => Promise<FriendDTO[]>;
+    areFriends: (user1: string, user2: string) => Promise<boolean>;
     createFriendship: (userLow: string, userHigh: string, source: Source) => Promise<Friendship | null>;
     removeFriendship: (userLow: string, userHigh: string) => Promise<boolean>;
 
@@ -32,9 +33,12 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
     const getFriendsOf = async (eId: string): Promise<FriendDTO[]> => {
         const { rows } = await db.query(`
             SELECT
-                u.e_id AS userId,
+                u.e_id AS id,
                 u.name AS name,
                 u.email AS email,
+                r.name AS role,
+                'Desconectado' AS status,
+                '' AS avatar,
                 f.create_time AS createdAt
             FROM friendships f
             JOIN users u
@@ -43,9 +47,22 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
                     OR
                     (f.user_high = ? AND u.e_id = f.user_low)
                 )
+            LEFT JOIN roles r ON u.role_id = r.id
             WHERE f.user_low = ? OR f.user_high = ?
         `, [eId, eId, eId, eId]);
         return rows as FriendDTO[];
+    };
+
+    const areFriends = async (user1: string, user2: string): Promise<boolean> => {
+        const [userLow, userHigh] = user1 < user2 ? [user1, user2] : [user2, user1];
+        const { rows } = await db.query(`
+            SELECT 1
+            FROM friendships
+            WHERE user_low = ? AND user_high = ?
+            LIMIT 1
+        `, [userLow, userHigh]);
+
+        return rows.length > 0;
     };
 
     const createFriendship = async (userLow: string, userHigh: string, source: Source): Promise<Friendship | null> => {
@@ -145,6 +162,7 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
     return {
         getAll,
         getFriendsOf,
+        areFriends,
         createFriendship,
         removeFriendship,
         getReceivedRequests,

@@ -9,6 +9,8 @@ export function makeUserRouter(controller: UserController): Router {
 
     router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAll));
     router.get("/name/:name", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllByName));
+    router.get("/profile", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getProfile));
+    router.get("/profile/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getProfile));
     router.get("/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getById));
     if (controller.TEMPORARY_CREATE) router.post("/create", asyncHandler(controller.TEMPORARY_CREATE));
 

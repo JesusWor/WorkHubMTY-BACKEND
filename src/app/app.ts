@@ -11,6 +11,7 @@ export type AppContainer = {
   friendshipRouter: Router;
   officeSlotsRouter: Router;
   parkingSlotsRouter: Router;
+  achievementsRouter: Router;
 };
 
 export function createApp(container: AppContainer) {
@@ -34,6 +35,7 @@ export function createApp(container: AppContainer) {
   router.use('/roles', container.roleRouter);
   router.use('/auth', container.authRouter);
   router.use('/friendships', container.friendshipRouter);
+  router.use('/achievements', container.achievementsRouter);
 
   router.use('/reservations', container.officeSlotsRouter);
   router.use('/parking', container.parkingSlotsRouter);

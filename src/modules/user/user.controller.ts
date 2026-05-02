@@ -8,6 +8,7 @@ export type UserController = {
   getAll: (req: Request, res: Response) => Promise<void>;
   getById: (req: Request, res: Response) => Promise<void>;
   getAllByName: (req: Request, res: Response) => Promise<void>;
+  getProfile: (req: Request, res: Response) => Promise<void>;
   TEMPORARY_CREATE?: (req: Request, res: Response) => Promise<void>;
 }
 
@@ -47,6 +48,21 @@ export function makeUserController(service: UserService): UserController {
       GlobalResponse.okWithData(res, users);
   };
 
+  const getProfile = async (req: Request, res: Response): Promise<void> => {
+      const authEId = req.user?.eId;
+      if (!authEId) {
+          GlobalResponse.unauthorized(res);
+          return;
+      }
+
+      const requestedEId = req.params.eId
+          ? z.string().min(1).parse(req.params.eId)
+          : authEId;
+
+      const profile = await service.getProfile(requestedEId, authEId);
+      GlobalResponse.okWithData(res, profile);
+  };
+
   const TEMPORARY_CREATE = async (req: Request, res: Response): Promise<void> => {
       if (!service.TEMPORARY_CREATE) return;
 
@@ -70,6 +86,7 @@ export function makeUserController(service: UserService): UserController {
       getAll,
       getById,
       getAllByName,
+      getProfile,
       TEMPORARY_CREATE
   };
 }

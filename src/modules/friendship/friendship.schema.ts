@@ -15,9 +15,12 @@ export type Friendship = z.infer<typeof FriendshipSchema>;
 
 
 export const FriendSchema = z.object({
-    userId: z.string(),
+    id: z.string(),
     name: z.string(),
     email: z.email(),
+    role: z.string(),
+    status: z.string(),
+    avatar: z.string(),
     createdAt: z.string()
 });
 
