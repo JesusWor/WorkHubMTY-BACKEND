@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Roles } from "../../middleware";
+import { Roles } from "../../middleware/index.js";
 
 export const UserAuthSchema = z.object({
   eId: z.string().min(1, "El e_id es requerido").max(8, "El e_id no puede superar 8 caracteres"),

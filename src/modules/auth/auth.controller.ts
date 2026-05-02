@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { AuthService } from "./auth.service";
-import { LoginSchema } from "./auth.schema";
-import { GlobalResponse } from "../../shared/response/globalresponse";
-import { verifyToken } from "../../shared/utils/jwt.util";
-import { UnauthorizedError } from "../../shared/errors/AppError";
-import { env } from "../../config/env"
+import { AuthService } from "./auth.service.js";
+import { LoginSchema } from "./auth.schema.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { verifyToken } from "../../shared/utils/jwt.util.js";
+import { UnauthorizedError } from "../../shared/errors/AppError.js";
+import { env } from "../../config/env.js"
 
 const { nodeEnv } = env.server;
 

@@ -1,5 +1,5 @@
-import { Db } from "../../infra/db/db";
-import { ParkingReservation, ParkingReservationCount } from "./parking-slots.schema";
+import { Db } from "../../infra/db/db.js";
+import { ParkingReservation, ParkingReservationCount } from "./parking-slots.schema.js";
 
 export type ParkingSlotsRepo = {
     getAll: () => Promise<ParkingReservation[]>;

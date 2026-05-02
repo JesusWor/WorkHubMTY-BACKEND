@@ -1,8 +1,8 @@
-import { ParkingSlotsRepo } from "./parking-slots.repo";
-import { ParkingReservation, ParkingReservationCount } from "./parking-slots.schema";
-import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError";
-import { JwtPayload } from "../../shared/schemas/auth.schema";
-import { Roles } from "../../middleware";
+import { ParkingSlotsRepo } from "./parking-slots.repo.js";
+import { ParkingReservation, ParkingReservationCount } from "./parking-slots.schema.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
+import { JwtPayload } from "../../shared/schemas/auth.schema.js";
+import { Roles } from "../../middleware/index.js";
 
 export type ParkingSlotsService = {
     getAll: () => Promise<ParkingReservation[]>;

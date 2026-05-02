@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
-import { GlobalResponse } from "../shared/response/globalresponse";
-import { Roles } from "../shared/types/role.type";
+import { GlobalResponse } from "../shared/response/globalresponse.js";
+import { Roles } from "../shared/types/role.type.js";
 
 export type RolePolicy = {
     allow?: Roles[];

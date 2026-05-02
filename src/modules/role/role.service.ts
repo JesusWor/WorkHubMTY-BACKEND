@@ -1,6 +1,6 @@
-import { RoleRepo } from "./role.repo";
-import { Role, CreateRole, UpdateRole } from "./role.schema";
-import { InternalError, NotFoundError } from "../../shared/errors/AppError";
+import { RoleRepo } from "./role.repo.js";
+import { Role, CreateRole, UpdateRole } from "./role.schema.js";
+import { InternalError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type RoleService = {
     getAll: () => Promise<Role[]>;

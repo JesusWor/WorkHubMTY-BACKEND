@@ -1,7 +1,7 @@
 import express, { Router } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { errorHandler } from '../middleware';
+import { errorHandler } from '../middleware/index.js';
 
 export type AppContainer = {
   authRouter: Router;

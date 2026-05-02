@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { OfficeSlotsService } from "./office-slots.service";
-import { GlobalResponse } from "../../shared/response/globalresponse";
-import { CreateOfficeSlotSchema, UpdateOfficeSlotSchema, BlockSlotBodySchema, AvailableOfficeSlotsSchema, SlotIdParamSchema } from "./office-slots.schema";
+import { OfficeSlotsService } from "./office-slots.service.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { CreateOfficeSlotSchema, UpdateOfficeSlotSchema, BlockSlotBodySchema, AvailableOfficeSlotsSchema, SlotIdParamSchema } from "./office-slots.schema.js";
 
 export type OfficeSlotsController = {
     getAll: (req: Request, res: Response) => Promise<void>;

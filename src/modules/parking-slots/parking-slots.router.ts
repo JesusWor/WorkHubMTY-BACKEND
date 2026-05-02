@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { ParkingSlotsController } from "./parking-slots.controller";
-import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware";
+import { ParkingSlotsController } from "./parking-slots.controller.js";
+import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware/index.js";
 
 export function makeParkingSlotsRouter(controller: ParkingSlotsController): Router {
     const router = Router();

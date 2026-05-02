@@ -1,4 +1,4 @@
-import { Roles } from "../types/role.type";
+import { Roles } from "../types/role.type.js";
 
 const roleMap: Record<string, Roles> = {
   // DB

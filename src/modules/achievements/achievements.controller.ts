@@ -1,7 +1,7 @@
-import { AchievementsService } from "./achievements.service";
-import { CreateAchievementInputSchema } from "./achievements.schema";
+import { AchievementsService } from "./achievements.service.js";
+import { CreateAchievementInputSchema } from "./achievements.schema.js";
 import { Request, Response } from "express";
-import { GlobalResponse } from "../../shared/response/globalresponse";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 
 export type AchievementsController = {
     getAll: (req: Request, res: Response) => Promise<void>;

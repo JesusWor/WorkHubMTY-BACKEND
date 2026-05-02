@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
-import { FriendshipService } from "./friendship.service";
-import { GlobalResponse } from "../../shared/response/globalresponse";
+import { FriendshipService } from "./friendship.service.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import {
     CreateFriendRequestSchema,
     RemoveRelationSchema,
-} from "./friendship.schema";
+} from "./friendship.schema.js";
 
 export type FriendshipController = {
     // Friendships

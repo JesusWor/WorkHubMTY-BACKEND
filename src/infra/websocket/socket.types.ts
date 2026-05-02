@@ -1,5 +1,5 @@
 import { Server, Socket } from "socket.io";
-import { Notification } from "../../modules/notifications/notifications.schema";
+import { Notification } from "../../modules/notifications/notifications.schema.js";
 
 export interface ServerToClientEvents {
   notification: (data: Notification) => void;

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { FriendshipController } from "./friendship.controller";
-import { authenticate, authorize, Roles, asyncHandler } from "../../middleware";
+import { FriendshipController } from "./friendship.controller.js";
+import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/index.js";
 
 export function makeFriendshipRouter(controller: FriendshipController): Router {
     const router = Router();

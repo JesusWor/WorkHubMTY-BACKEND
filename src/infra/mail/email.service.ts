@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
-import { env } from "../../config/env";
-import { SendEmailDTO } from "./email.types";
+import { env } from "../../config/env.js";
+import { SendEmailDTO } from "./email.types.js";
 
 export class EmailService {
 

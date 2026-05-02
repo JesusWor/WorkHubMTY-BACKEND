@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { ParkingSlotsService } from "./parking-slots.service";
-import { GlobalResponse } from "../../shared/response/globalresponse";
-import { CreateParkingReservationSchema, ReassignParkingReservationSchema, ParkingIdParamSchema, ParkingAvailabilityQuerySchema } from "./parking-slots.schema";
-import { JwtPayload } from "../../shared/schemas/auth.schema";
+import { ParkingSlotsService } from "./parking-slots.service.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { CreateParkingReservationSchema, ReassignParkingReservationSchema, ParkingIdParamSchema, ParkingAvailabilityQuerySchema } from "./parking-slots.schema.js";
+import { JwtPayload } from "../../shared/schemas/auth.schema.js";
 
 export type ParkingSlotsController = {
     getAll: (req: Request, res: Response) => Promise<void>;

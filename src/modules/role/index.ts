@@ -1,5 +1,5 @@
-export { makeRoleRepo } from "./role.repo";
-export { makeRoleService } from "./role.service";
-export { makeRoleController } from "./role.controller";
-export { makeRoleRouter } from "./role.router";
-export * from "./role.schema";
+export { makeRoleRepo } from "./role.repo.js";
+export { makeRoleService } from "./role.service.js";
+export { makeRoleController } from "./role.controller.js";
+export { makeRoleRouter } from "./role.router.js";
+export * from "./role.schema.js";

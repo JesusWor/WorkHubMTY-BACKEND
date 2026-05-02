@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { NotificationService } from "./notifications.schema";
+import { NotificationService } from "./notifications.schema.js";
 
 export function makeNotificationController(notificationService : NotificationService) {
   const subscribe = (req: Request, res: Response) => {

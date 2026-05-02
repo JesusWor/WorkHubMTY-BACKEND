@@ -1,10 +1,10 @@
-import { RoleRepo } from "../role/role.repo";
-import { UserRepo } from "./user.repo";
-import { User, Profile } from "./user.schema";
-import { FriendshipService } from "../friendship/friendship.service";
-import { AchievementsService } from "../achievements/achievements.service";
+import { RoleRepo } from "../role/role.repo.js";
+import { UserRepo } from "./user.repo.js";
+import { User, Profile } from "./user.schema.js";
+import { FriendshipService } from "../friendship/friendship.service.js";
+import { AchievementsService } from "../achievements/achievements.service.js";
 import bcrypt from "bcrypt";
-import { ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError";
+import { ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;

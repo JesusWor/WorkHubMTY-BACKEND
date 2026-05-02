@@ -1,8 +1,8 @@
-import { UserService } from "./user.service";
+import { UserService } from "./user.service.js";
 import { Request, Response } from "express";
-import { GlobalResponse } from "../../shared/response/globalresponse";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
-import { CreateUserSchema } from "./user.schema";
+import { CreateUserSchema } from "./user.schema.js";
 
 export type UserController = {
   getAll: (req: Request, res: Response) => Promise<void>;

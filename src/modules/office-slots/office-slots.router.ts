@@ -1,7 +1,7 @@
 // office-slots.routes.ts
 import { Router } from "express";
-import { OfficeSlotsController } from "./office-slots.controller";
-import { authenticate, authorize, Roles, asyncHandler } from "../../middleware";
+import { OfficeSlotsController } from "./office-slots.controller.js";
+import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/index.js";
 
 export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router {
     const router = Router();

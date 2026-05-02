@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller.js";
-import { authenticate, asyncHandler } from "../../middleware";
+import { authenticate, asyncHandler } from "../../middleware/index.js";
 
 export function makeAuthRouter(controller: AuthController): Router {
     const router = Router();

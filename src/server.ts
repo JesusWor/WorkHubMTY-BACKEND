@@ -1,10 +1,10 @@
 import 'dotenv/config';
 
 import http from 'http';
-import { createApp } from './app/app';
-import { env } from './config/env';
-import { buildContainer } from './app/container';
-import { initSocket } from './infra/websocket/socket.server';
+import { createApp } from './app/app.js';
+import { env } from './config/env.js';
+import { buildContainer } from './app/container.js';
+import { initSocket } from './infra/websocket/socket.server.js';
 
 const container = buildContainer();
 const app = createApp(container);

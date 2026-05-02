@@ -1,6 +1,6 @@
-import { OfficeSlotsRepo } from "./office-slots.repo";
-import { OfficeSlot, CreateOfficeSlotBody, UpdateOfficeSlotBody, BlockSlotBody, AvailableOfficeSlotsQuery, SlotAvailabilityResult, FriendOccupancy } from "./office-slots.schema";
-import { NotFoundError, UnprocessableError } from "../../shared/errors/AppError";
+import { OfficeSlotsRepo } from "./office-slots.repo.js";
+import { OfficeSlot, CreateOfficeSlotBody, UpdateOfficeSlotBody, BlockSlotBody, AvailableOfficeSlotsQuery, SlotAvailabilityResult, FriendOccupancy } from "./office-slots.schema.js";
+import { NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
 
 export type OfficeSlotsService = {
   getAvailableSlots: (query: AvailableOfficeSlotsQuery) => Promise<SlotAvailabilityResult[]>;

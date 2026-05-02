@@ -1,10 +1,10 @@
 import bcrypt from "bcrypt";
-import { AuthRepo } from "./auth.repo";
-import { LoginDto, User } from "./auth.schema";
-import { JwtPayload } from "../../shared/schemas/auth.schema";
-import { mapRole } from "../../shared/utils/role.util";
-import { generateToken } from "../../shared/utils/jwt.util";
-import { NotFoundError, UnauthorizedError } from "../../shared/errors/AppError";
+import { AuthRepo } from "./auth.repo.js";
+import { LoginDto, User } from "./auth.schema.js";
+import { JwtPayload } from "../../shared/schemas/auth.schema.js";
+import { mapRole } from "../../shared/utils/role.util.js";
+import { generateToken } from "../../shared/utils/jwt.util.js";
+import { NotFoundError, UnauthorizedError } from "../../shared/errors/AppError.js";
 
 export type AuthService = {
     login: (dto: LoginDto) => Promise<{ token: string; user: User }>;

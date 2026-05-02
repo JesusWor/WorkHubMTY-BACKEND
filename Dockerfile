@@ -1,6 +1,8 @@
 FROM node:18-alpine AS build
-WORKDIR /app
+WORKDIR /backend
 COPY package*.json ./
 RUN npm install
 COPY . .
-RUN npm run start
+EXPOSE 3001
+RUN npm run build
+CMD ["npm", "run", "start"]

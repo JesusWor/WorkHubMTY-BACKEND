@@ -1,5 +1,5 @@
-import { Db } from "../../infra/db/db";
-import { Achievements, AchievementLevel, CreateAchievementInput } from "./achievements.schema";
+import { Db } from "../../infra/db/db.js";
+import { Achievements, AchievementLevel, CreateAchievementInput } from "./achievements.schema.js";
 
 export type AchievementsRepo = {
     getAll: () => Promise<Achievements[]>;

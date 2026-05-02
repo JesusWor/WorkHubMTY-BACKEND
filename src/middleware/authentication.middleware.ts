@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken } from "../shared/utils/jwt.util";
-import { GlobalResponse } from "../shared/response/globalresponse";
-import { JwtPayloadSchema } from "../shared/schemas/auth.schema"
+import { verifyToken } from "../shared/utils/jwt.util.js";
+import { GlobalResponse } from "../shared/response/globalresponse.js";
+import { JwtPayloadSchema } from "../shared/schemas/auth.schema.js"
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies?.token;
