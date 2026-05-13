@@ -1,17 +1,19 @@
 import { Db } from "../../infra/db/db.js";
-import { User } from "./user.schema.js";
+import { User, Guest } from "./user.schema.js";
 
 export type UserRepo = {
     getAll: () => Promise<User[]>;
     getById: (eId: string) => Promise<User | null>;
+    getByIds(eIds: string[]): Promise<User[]>;
+    getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
     getAllByName: (name: string) => Promise<User[]>;
-    TEMPORARY_CREATE: (eId:string, name:string, email:string, hashedPassword:string, roleId:number) => Promise<User>;
+    TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => Promise<User>;
 }
 
 export function makeUserRepo(db: Db): UserRepo {
     const MIN_NAME_LENGTH_LIKE = 3;
-    
+
     const getAll = async (): Promise<User[]> => {
         const { rows } = await db.query("SELECT * FROM public_users_view");
         return rows as User[];
@@ -20,6 +22,32 @@ export function makeUserRepo(db: Db): UserRepo {
     const getById = async (eId: string): Promise<User | null> => {
         const { rows } = await db.query("SELECT * FROM public_users_view WHERE e_id = ?", [eId]);
         return rows.length > 0 ? rows[0] : null;
+    }
+
+    const getByIds = async (eIds: string[]): Promise<User[]> => {
+        if (!eIds.length) return [];
+
+        const placeholders = eIds.map(() => "?").join(",");
+
+        const { rows } = await db.query(
+            `SELECT * FROM public_users_view WHERE e_id IN (${placeholders})`,
+            eIds
+        );
+
+        return rows as User[];
+    }
+
+    const getGuestsByIds = async (guestIds: number[]): Promise<Guest[]> => {
+        if (!guestIds.length) return [];
+
+        const placeholders = guestIds.map(() => "?").join(",");
+
+        const { rows } = await db.query(
+            `SELECT id, name, email, invited_by FROM guests WHERE id IN (${placeholders})`,
+            guestIds
+        );
+
+        return rows as Guest[];
     }
 
     const getAllByName = async (query: string): Promise<User[]> => {
@@ -57,27 +85,29 @@ export function makeUserRepo(db: Db): UserRepo {
         return rows as User[];
     };
 
-    const TEMPORARY_CREATE = async (eId:string, name:string, email:string, hashedPassword:string, roleId:number) => {
+    const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => {
         const { affectedCount, insertId } = await db.execute(`
             INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
             VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
-        
-        if(!affectedCount){
+
+        if (!affectedCount) {
             throw new Error('No se insertó el usuario');
         }
 
-        const {rows} = await db.query(`
+        const { rows } = await db.query(`
             SELECT *
             FROM users
             WHERE id = ?`, [insertId]);
 
         return rows[0];
-        
+
     };
 
     return {
         getAll,
         getById,
+        getByIds,
+        getGuestsByIds,
         getAllByName,
         TEMPORARY_CREATE
     }

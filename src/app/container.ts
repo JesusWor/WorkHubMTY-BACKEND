@@ -42,7 +42,7 @@ export function buildContainer() {
     const authRouter = makeAuthRouter(authController);
 
     const officeSlotsRepo = makeOfficeSlotsRepo(db);
-    const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo);
+    const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
     const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
     const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
 
