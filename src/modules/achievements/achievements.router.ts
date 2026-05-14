@@ -5,39 +5,43 @@ import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/i
 export function makeAchievementsRouter(controller: AchievementsController): Router {
     const router = Router();
 
-    router.get("/achievements",
+    router.get("/",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getAll));
 
-    router.get("/achievements/code/:code",
+    router.get("/me",
+        authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
+        asyncHandler(controller.getMyAchievements));
+
+    router.get("/code/:code",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getByCode));
 
-    router.get("/achievements/:id",
+    router.get("/:id",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getById));
     
-    router.post("/achievements",
+    router.post("/",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }),
         asyncHandler(controller.createAchievement));
 
-    router.patch("/achievements/progress",
+    router.patch("/progress",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.updateAchievements));
 
-    router.get("/achievements/:id/ranking",
+    router.get("/:id/ranking",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getRanking));
 
-    router.get("/achievements/:id/list",
+    router.get("/:id/list",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getUserAchievements));
 
-    router.get("/achievements/:id/stats",
+    router.get("/:id/stats",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getUserStats));
 
-    router.get("/achievements/:id/activity",
+    router.get("/:id/activity",
         authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }),
         asyncHandler(controller.getRecentActivity));
 

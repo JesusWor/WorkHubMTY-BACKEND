@@ -5,6 +5,7 @@ import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } fro
 import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from '../modules/user/index.js';
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
+import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from '../modules/achievements/index.js';
 import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications/index.js';
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
@@ -53,7 +54,16 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const roleRouter = makeRoleRouter(roleController);
 
   const userRepo = makeUserRepo(db);
-  const userService = makeUserService(userRepo, roleRepo);
+
+  const friendshipRepo = makeFriendshipRepo(db);
+  const friendshipService = makeFriendshipService(friendshipRepo);
+
+  const achievementsRepo = makeAchievementsRepo(db);
+  const achievementsService = makeAchievementsService(achievementsRepo);
+  const achievementsController = makeAchievementsController(achievementsService);
+  const achievementsRouter = makeAchievementsRouter(achievementsController);
+
+  const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService);
   const userController = makeUserController(userService);
   const userRouter = makeUserRouter(userController);
 
@@ -61,13 +71,11 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const notificationController = makeNotificationController(notificationService);
   const notificationRouter = makeNotificationRouter(notificationController);
 
-  const friendshipRepo = makeFriendshipRepo(db);
-  const friendshipService = makeFriendshipService(friendshipRepo);
   const friendshipController = makeFriendshipController(friendshipService);
   const friendshipRouter = makeFriendshipRouter(friendshipController);
 
   const officeSlotsRepo = makeOfficeSlotsRepo(db);
-  const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo);
+  const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
   const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
   const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
 
@@ -83,6 +91,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     userRouter,
     notificationRouter,
     friendshipRouter,
+    achievementsRouter,
     officeSlotsRouter,
     parkingSlotsRouter,
     fakeAuthenticate,

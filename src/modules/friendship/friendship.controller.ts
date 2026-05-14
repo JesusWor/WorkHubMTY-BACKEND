@@ -3,13 +3,13 @@ import { FriendshipService } from "./friendship.service.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import {
     CreateFriendRequestSchema,
+    AcceptFriendRequestSchema,
     RemoveRelationSchema,
 } from "./friendship.schema.js";
 
 export type FriendshipController = {
     // Friendships
     getAll: (req: Request, res: Response) => Promise<void>;
-    getMine: (req: Request, res: Response) => Promise<void>;
     createFriendship: (req: Request, res: Response) => Promise<void>;
     removeFriendship: (req: Request, res: Response) => Promise<void>;
 
@@ -17,7 +17,10 @@ export type FriendshipController = {
     getReceivedRequests: (req: Request, res: Response) => Promise<void>;
     getSentRequests: (req: Request, res: Response) => Promise<void>;
     createRequest: (req: Request, res: Response) => Promise<void>;
-    removeRequest: (req: Request, res: Response) => Promise<void>;
+    acceptRequest: (req: Request, res: Response) => Promise<void>;
+    cancelRequest: (req: Request, res: Response) => Promise<void>;
+    rejectRequest: (req: Request, res: Response) => Promise<void>;
+
 };
 
 export function makeFriendshipController(service: FriendshipService): FriendshipController {
@@ -26,17 +29,6 @@ export function makeFriendshipController(service: FriendshipService): Friendship
     const getAll = async (_req: Request, res: Response): Promise<void> => {
         const friendships = await service.getAll();
         GlobalResponse.okWithData(res, friendships);
-    };
-
-    // GET /friendships/me — usuario autenticado ve sus amigos
-    const getMine = async (req: Request, res: Response): Promise<void> => {
-        if (!req.user) {
-            GlobalResponse.unauthorized(res);
-            return;
-        }
-
-        const friends = await service.getFriendsOf(req.user.eId);
-        GlobalResponse.okWithData(res, friends);
     };
 
     // POST /friendships — ADMIN crea amistad directa entre dos usuarios
@@ -108,8 +100,25 @@ export function makeFriendshipController(service: FriendshipService): Friendship
         GlobalResponse.created(res, request);
     };
 
-    // DELETE /friendships/requests — cancelar/rechazar solicitud
-    const removeRequest = async (req: Request, res: Response): Promise<void> => {
+    // POST /friendships/requests/received — receptor acepta la solicitud
+    const acceptRequest = async (req: Request, res: Response): Promise<void> => {
+        if (!req.user) {
+            GlobalResponse.unauthorized(res);
+            return;
+        }
+
+        const parsed = AcceptFriendRequestSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const friendship = await service.acceptRequest(req.user.eId, parsed.data.fromUser);
+        GlobalResponse.created(res, friendship);
+    };
+
+    // DELETE /friendships/requests/sent — emisor cancela su solicitud
+    const cancelRequest = async (req: Request, res: Response): Promise<void> => {
         if (!req.user) {
             GlobalResponse.unauthorized(res);
             return;
@@ -121,18 +130,36 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        await service.removeRequest(req.user.eId, parsed.data.userId);
-        GlobalResponse.ok(res, "Friend request removed");
+        await service.cancelRequest(req.user.eId, parsed.data.userId);
+        GlobalResponse.ok(res, "Friend request cancelled");
+    };
+
+    // DELETE /friendships/requests/received — receptor rechaza la solicitud
+    const rejectRequest = async (req: Request, res: Response): Promise<void> => {
+        if (!req.user) {
+            GlobalResponse.unauthorized(res);
+            return;
+        }
+
+        const parsed = RemoveRelationSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        await service.rejectRequest(req.user.eId, parsed.data.userId);
+        GlobalResponse.ok(res, "Friend request rejected");
     };
 
     return {
         getAll,
-        getMine,
         createFriendship,
         removeFriendship,
         getReceivedRequests,
         getSentRequests,
         createRequest,
-        removeRequest,
+        acceptRequest,
+        cancelRequest,
+        rejectRequest,
     };
 }

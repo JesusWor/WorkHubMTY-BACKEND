@@ -10,6 +10,7 @@ export type AchievementsController = {
     createAchievement: (req: Request, res: Response) => Promise<void>;
     updateAchievements: (req: Request, res: Response) => Promise<void>;
     getRanking: (req: Request, res: Response) => Promise<void>;
+    getMyAchievements: (req: Request, res: Response) => Promise<void>;
     getUserAchievements: (req: Request, res: Response) => Promise<void>;
     getUserStats: (req: Request, res: Response) => Promise<void>;
     getRecentActivity: (req: Request, res: Response) => Promise<void>;
@@ -95,6 +96,16 @@ export function makeAchievementsController(service: AchievementsService): Achiev
         GlobalResponse.okWithData(res, ranking);
     };
 
+    const getMyAchievements = async (req: Request, res: Response): Promise<void> => {
+        if (!req.user) {
+            GlobalResponse.unauthorized(res);
+            return;
+        }
+
+        const achievements = await service.getUserAchievements(req.user.eId);
+        GlobalResponse.okWithData(res, achievements);
+    };
+
     const getUserAchievements = async (req: Request, res: Response): Promise<void> => {
         const id = String(req.params.id);
         if (!id) {
@@ -135,6 +146,7 @@ export function makeAchievementsController(service: AchievementsService): Achiev
         createAchievement,
         updateAchievements,
         getRanking,
+        getMyAchievements,
         getUserAchievements,
         getUserStats,
         getRecentActivity,

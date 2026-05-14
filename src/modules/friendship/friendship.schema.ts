@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 export const SourceEnum = z.enum(["ADMIN", "REQUEST"]);
+export const RequestStatusEnum = z.enum(["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"]);
 
 export type Source = z.infer<typeof SourceEnum>;
+export type RequestStatus = z.infer<typeof RequestStatusEnum>;
 
 export const FriendshipSchema = z.object({
     userLow: z.string(),
@@ -11,26 +13,14 @@ export const FriendshipSchema = z.object({
     createdAt: z.string()
 });
 
-export type Friendship = z.infer<typeof FriendshipSchema>;
-
-
-export const FriendSchema = z.object({
-    userId: z.string(),
-    name: z.string(),
-    email: z.email(),
-    createdAt: z.string()
-});
-
-export type FriendDTO = z.infer<typeof FriendSchema>;
-
-
 export const FriendRequestSchema = z.object({
+    id: z.number(),
     fromUser: z.string(),
     toUser: z.string(),
-    createdAt: z.string()
+    status: RequestStatusEnum,
+    createdAt: z.string(),
+    resolvedAt: z.string().nullable(),
 });
-
-export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 
 export const CreateFriendRequestSchema = z.object({
     toUser: z.string()
@@ -43,3 +33,6 @@ export const AcceptFriendRequestSchema = z.object({
 export const RemoveRelationSchema = z.object({
     userId: z.string()
 });
+
+export type Friendship = z.infer<typeof FriendshipSchema>;
+export type FriendRequest = z.infer<typeof FriendRequestSchema>;

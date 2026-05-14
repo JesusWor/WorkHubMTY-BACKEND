@@ -1,17 +1,18 @@
 import bcrypt from "bcrypt";
 import { AuthRepo } from "./auth.repo.js";
-import { LoginDto } from "./auth.schema.js";
+import { LoginDto, User } from "./auth.schema.js";
 import { JwtPayload } from "../../shared/schemas/auth.schema.js";
 import { mapRole } from "../../shared/utils/role.util.js";
 import { generateToken } from "../../shared/utils/jwt.util.js";
-import { UnauthorizedError } from "../../shared/errors/AppError.js";
+import { NotFoundError, UnauthorizedError } from "../../shared/errors/AppError.js";
 
 export type AuthService = {
-    login: (dto: LoginDto) => Promise<string>;
+    login: (dto: LoginDto) => Promise<{ token: string; user: User }>;
+    me: (eId: string) => Promise<User>;
 };
 
 export function makeAuthService(repo: AuthRepo): AuthService {
-    const login = async ({ eId, password }: LoginDto): Promise<string> => {
+    const login = async ({ eId, password }: LoginDto): Promise<{ token: string; user: User }> => {
         const user = await repo.getById(eId);
         if (!user) throw new UnauthorizedError("Credenciales inválidas");
 
@@ -23,8 +24,25 @@ export function makeAuthService(repo: AuthRepo): AuthService {
             role: mapRole(user.roleName.toString())
         };
 
-        return generateToken(payload);
+        const token = generateToken(payload);
+
+        return {
+            token,
+            user: {
+                eId: user.eId,
+                name: user.name,
+                role: mapRole(user.roleName.toString()),
+            },
+        };
+
     };
 
-    return { login };
+    const me = async (eId: string): Promise<User> => {
+        const user = await repo.getMe(eId);
+        if (!user) throw new NotFoundError("Usuario no encontrado");
+        return user;
+    };
+
+
+    return { login, me };
 }

@@ -6,6 +6,8 @@ export function makeAuthRouter(controller: AuthController): Router {
     const router = Router();
 
     router.post("/login", asyncHandler(controller.login));
+    
+    router.get("/me", authenticate, asyncHandler(controller.me));
     router.post("/logout", authenticate, asyncHandler(controller.logout));
 
     return router;

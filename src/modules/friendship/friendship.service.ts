@@ -1,17 +1,20 @@
 import { FriendshipRepo } from "./friendship.repo.js";
-import { Friendship, FriendDTO, FriendRequest, Source } from "./friendship.schema.js";
+import { Friendship, FriendRequest, Source } from "./friendship.schema.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type FriendshipService = {
     getAll: () => Promise<Friendship[]>;
-    getFriendsOf: (eId: string) => Promise<FriendDTO[]>;
-    createFriendship: (userLow: string, userHigh: string, source: Source) => Promise<Friendship | null>;
+    getFriendIds: (eId: string) => Promise<string[]>;
+    areFriends: (user1: string, user2: string) => Promise<boolean>;
+    createFriendship: (user1: string, user2: string, source: Source) => Promise<Friendship | null>;
     removeFriendship: (user1: string, user2: string) => Promise<boolean>;
 
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<FriendRequest[]>;
     createRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
-    removeRequest: (user1: string, user2: string) => Promise<boolean>;
+    acceptRequest: (toUser: string, fromUser: string) => Promise<Friendship | null>;
+    cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
+    rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
 };
 
 export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
@@ -20,9 +23,15 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         return await repo.getAll();
     };
 
-    const getFriendsOf = async (eId: string): Promise<FriendDTO[]> => {
+    const getFriendIds = async (eId: string): Promise<string[]> => {
         if (!eId) throw new BadRequestError("User id is required");
-        return await repo.getFriendsOf(eId);
+        return await repo.getFriendIds(eId);
+    };
+
+    const areFriends = async (user1: string, user2: string): Promise<boolean> => {
+        if (!user1 || !user2) throw new BadRequestError("Both user ids are required");
+        if (user1 === user2) return true;
+        return await repo.areFriends(user1, user2);
     };
 
     const createFriendship = async (user1: string, user2: string, source: Source): Promise<Friendship | null> => {
@@ -62,29 +71,57 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         if (!fromUser || !toUser) throw new BadRequestError("Both user ids are required");
         if (fromUser === toUser) throw new BadRequestError("A user cannot send a friend request to themselves");
 
+        const alreadyFriends = await repo.areFriends(fromUser, toUser);
+        if (alreadyFriends) throw new ConflictError("Users are already friends");
+
         const request = await repo.createRequest(fromUser, toUser);
-        if (!request) throw new ConflictError("Friend request already exists");
+        if (!request) throw new ConflictError("Friend request already pending");
 
         return request;
     };
 
-    const removeRequest = async (user1: string, user2: string): Promise<boolean> => {
-        if (!user1 || !user2) throw new BadRequestError("Both user ids are required");
+    const acceptRequest = async (fromUser: string, toUser: string): Promise<Friendship | null> => {
+        if (!fromUser || !toUser) throw new BadRequestError("Both user ids are required");
 
-        const removed = await repo.removeRequest(user1, user2);
-        if (!removed) throw new NotFoundError("Friend request not found");
+        const accepted = await repo.acceptRequest(fromUser, toUser);
+        if (!accepted) throw new NotFoundError("Pending friend request not found");
+
+        const friendship = createFriendship(fromUser, toUser, "REQUEST");
+        if (!friendship) throw new ConflictError("Friendship already exists");
+
+        return friendship;
+    };
+
+    const cancelRequest = async (fromUser: string, toUser: string): Promise<boolean> => {
+        if (!fromUser || !toUser) throw new BadRequestError("Both user ids are required");
+
+        const cancelled = await repo.cancelRequest(fromUser, toUser);
+        if (!cancelled) throw new NotFoundError("Pending friend request not found");
 
         return true;
     };
 
+    const rejectRequest = async (toUser: string, fromUser: string): Promise<boolean> => {
+        if (!toUser || !fromUser) throw new BadRequestError("Both user ids are required");
+
+        const rejected = await repo.rejectRequest(toUser, fromUser);
+        if (!rejected) throw new NotFoundError("Pending friend request not found");
+
+        return true;
+    };
+
+
     return {
         getAll,
-        getFriendsOf,
+        getFriendIds,
+        areFriends,
         createFriendship,
         removeFriendship,
         getReceivedRequests,
         getSentRequests,
         createRequest,
-        removeRequest,
+        acceptRequest,
+        cancelRequest,
+        rejectRequest,
     };
 }

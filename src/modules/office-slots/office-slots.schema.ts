@@ -20,24 +20,88 @@ export const ReservationSchema = z.object({
   user_id: z.string(),
   start_time: z.coerce.date(),
   end_time: z.coerce.date(),
-  checked_in: z.union([z.literal(0), z.literal(1)]), // o z.boolean().transform(...)
+  checked_in: z.union([z.literal(0), z.literal(1)]),
+});
+
+export const ParticipantStatusEnum = z.enum(["PENDING", "ACCEPTED", "REJECTED"]);
+
+export const WorkGroupSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  memberCount: z.number().int().nonnegative().optional(),
+});
+
+export const UserSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+  role: z.string(),
+});
+
+export const GuestSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+});
+
+export const ReservationParticipantSchema = z.object({
+  id: z.number(),
+  reservationId: z.number(),
+  userId: z.string().nullable(),
+  guestId: z.number().nullable(),
+  ownershipPriority: z.number(),
+  checkedIn: z.boolean(),
+  status: ParticipantStatusEnum,
+  user: UserSummarySchema.nullable(),
+  guest: GuestSchema.nullable(),
+});
+
+export const ReservationDetailSchema = z.object({
+  id: z.number(),
+  reservableId: z.number(),
+  startTime: z.string(),
+  endTime: z.string(),
+  canOverlap: z.boolean(),
+  workGroups: z.array(WorkGroupSchema),
+  participants: z.array(ReservationParticipantSchema),
 });
 
 export const CreateOfficeSlotSchema = z.object({
-  name: z.string().min(1),
+  name: z.string(),
   capacity: z.number().int().positive(),
-  floor_id: z.number().int(),
+  floor_id: z.number().int().positive(),
 });
 
 export const UpdateOfficeSlotSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().optional(),
   capacity: z.number().int().positive().optional(),
-  floor_id: z.number().int().optional(),
+  floor_id: z.number().int().positive().optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+  message: "At least one field must be provided",
 });
 
 export const BlockSlotBodySchema = z.object({
   is_blocked: z.boolean(),
-  reason: z.string().optional(),
+});
+
+export const CreateReservationScheduleSchema = z.object({
+  start_time: z.string(),
+  end_time: z.string(),
+});
+
+export const CreateReservationBatchSchema = z.object({
+  reservableId: z.number().int().positive(),
+  schedules: z.array(CreateReservationScheduleSchema).min(1),
+  workGroupIds: z.array(z.number().int().positive()).optional(),
+  userIds: z.array(z.string()).optional(),
+  guestIds: z.array(z.number().int().positive()).optional(),
+  canOverlap: z.boolean(),
+});
+
+export const UpdateParticipantStatusSchema = z.object({
+  status: ParticipantStatusEnum,
+  reinvite: z.boolean().optional(),
 });
 
 export const AvailableOfficeSlotsSchema = z.object({
@@ -45,7 +109,7 @@ export const AvailableOfficeSlotsSchema = z.object({
   start_time: z.string(),
   end_time: z.string(),
   user_id: z.string().optional(),
-}).refine(data => data.end_time > data.start_time, {
+}).refine((data) => data.end_time > data.start_time, {
   message: "end_time must be after start_time",
 });
 
@@ -74,9 +138,16 @@ export const SlotIdParamSchema = z.object({
 export type OfficeSlot = z.infer<typeof OfficeSlotSchema>;
 export type Floor = z.infer<typeof FloorSchema>;
 export type Reservation = z.infer<typeof ReservationSchema>;
+export type ParticipantStatus = z.infer<typeof ParticipantStatusEnum>;
+export type WorkGroup = z.infer<typeof WorkGroupSchema>;
+export type UserSummary = z.infer<typeof UserSummarySchema>;
+export type GuestSummary = z.infer<typeof GuestSchema>;
+export type ReservationParticipant = z.infer<typeof ReservationParticipantSchema>;
+export type ReservationDetail = z.infer<typeof ReservationDetailSchema>;
 export type CreateOfficeSlotBody = z.infer<typeof CreateOfficeSlotSchema>;
 export type UpdateOfficeSlotBody = z.infer<typeof UpdateOfficeSlotSchema>;
 export type BlockSlotBody = z.infer<typeof BlockSlotBodySchema>;
 export type AvailableOfficeSlotsQuery = z.infer<typeof AvailableOfficeSlotsSchema>;
 export type FriendOccupancy = z.infer<typeof FriendOccupancySchema>;
 export type SlotAvailabilityResult = z.infer<typeof SlotAvailabilityResultSchema>;
+export type CreateReservationBatchBody = z.infer<typeof CreateReservationBatchSchema>;

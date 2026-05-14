@@ -9,6 +9,7 @@ export type AchievementsRepo = {
     updateAchievements: (userId: string, achievementId: number, increment: number) => Promise<void>;
     getRanking: (userId: string) => Promise<any[]>;
     getUserAchievements: (userId: string) => Promise<any[]>;
+    getCompletedByUser: (userId: string) => Promise<any[]>;
     getUserStats: (userId: string) => Promise<any>;
     getRecentActivity: (userId: string) => Promise<any>;
 }
@@ -145,6 +146,24 @@ export function makeAchievementsRepo(db: Db): AchievementsRepo {
         return rows;
     };
 
+    const getCompletedByUser = async (userId: string): Promise<any[]> => {
+        const { rows } = await db.query(
+            `SELECT
+                a.id,
+                a.name,
+                ua.progress,
+                MAX(al.progress_required) AS goal
+             FROM user_achievements ua
+             JOIN achievements a ON ua.achievement_id = a.id
+             JOIN achievement_levels al ON al.achievements_id = a.id
+             WHERE ua.user_id = ?
+             GROUP BY a.id, a.name, ua.progress
+             HAVING ua.progress >= MAX(al.progress_required)`,
+            [userId]
+        );
+        return rows;
+    };
+
     // FIX: llaves {} invalidas, lógica OR para user_low / user_high
     const getUserStats = async (userId: string): Promise<any> => {
         const { rows: resRows } = await db.query(
@@ -210,6 +229,7 @@ export function makeAchievementsRepo(db: Db): AchievementsRepo {
         updateAchievements,
         getRanking,
         getUserAchievements,
+        getCompletedByUser,
         getUserStats,
         getRecentActivity,
     };

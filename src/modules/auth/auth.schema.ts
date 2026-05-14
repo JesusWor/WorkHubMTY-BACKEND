@@ -3,6 +3,7 @@ import { Roles } from "../../middleware/index.js";
 
 export const UserAuthSchema = z.object({
   eId: z.string().min(1, "El e_id es requerido").max(8, "El e_id no puede superar 8 caracteres"),
+  name: z.string(),
   passwordHash: z.string(),
   roleName: z.string()
 });
@@ -15,3 +16,9 @@ export const LoginSchema = z.object({
 });
 
 export type LoginDto = z.infer<typeof LoginSchema>;
+
+export type User = {
+  eId: string;
+  name: string;
+  role: string;
+};

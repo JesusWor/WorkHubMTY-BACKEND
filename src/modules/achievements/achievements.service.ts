@@ -10,6 +10,7 @@ export type AchievementsService = {
     updateAchievements: (userId: string, achievementId: number, increment: number) => Promise<void>;
     getRanking: (userId: string) => Promise<any[]>;
     getUserAchievements: (userId: string) => Promise<any[]>;
+    getCompletedByUser: (userId: string) => Promise<any[]>;
     getUserStats: (userId: string) => Promise<any>;
     getRecentActivity: (userId: string) => Promise<any>;
 }
@@ -57,6 +58,10 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getUserAchievements(userId);
     };
 
+    const getCompletedByUser = async (userId: string): Promise<any[]> => {
+        return await repo.getCompletedByUser(userId);
+    };
+
     const getUserStats = async (userId: string): Promise<any> => {
         return await repo.getUserStats(userId);
     };
@@ -73,6 +78,7 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         updateAchievements,
         getRanking,
         getUserAchievements,
+        getCompletedByUser,
         getUserStats,
         getRecentActivity,
     };
