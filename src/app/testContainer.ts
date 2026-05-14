@@ -6,7 +6,7 @@ import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } fro
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
 import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from '../modules/achievements/index.js';
-import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications/index.js';
+import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
@@ -67,9 +67,10 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const userController = makeUserController(userService);
   const userRouter = makeUserRouter(userController);
 
-  const notificationService = makeNotificationService();
-  const notificationController = makeNotificationController(notificationService);
-  const notificationRouter = makeNotificationRouter(notificationController);
+  const notificationRepo = makeNotificationsRepo(db);
+  const notificationService = makeNotificationsService(notificationRepo);
+  const notificationController = makeNotificationsController(notificationService);
+  const notificationRouter = makeNotificationsRouter(notificationController);
 
   const friendshipController = makeFriendshipController(friendshipService);
   const friendshipRouter = makeFriendshipRouter(friendshipController);
