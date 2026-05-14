@@ -6,7 +6,7 @@ dist/
 coverage/
 
 # env files
-.env*
+.env
 !.env.example
 
 # logs
