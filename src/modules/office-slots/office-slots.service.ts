@@ -36,7 +36,7 @@ export type OfficeSlotsService = {
     getUsers: () => Promise<UserSummary[]>;
     getGuests: () => Promise<GuestSummary[]>;
     getReservationDetail: (id: number) => Promise<ReservationDetail>;
-    createReservationBatch: (data: CreateReservationBatchBody) => Promise<ReservationDetail[]>;
+    createReservationBatch: (data: CreateReservationBatchBody, currentUserId?: string) => Promise<ReservationDetail[]>;
     updateParticipantStatus: (participantId: number, status: ParticipantStatus, reinvite?: boolean) => Promise<ReservationParticipant>;
     getMyReservations: (userId: string) => Promise<UserReservationSummary>;
     getMyFriendsReservations: (userId: string) => Promise<FriendReservationsSummary>;
@@ -196,7 +196,7 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         };
     };
 
-    const createReservationBatch = async (data: CreateReservationBatchBody): Promise<ReservationDetail[]> => {
+    const createReservationBatch = async (data: CreateReservationBatchBody, currentUserId?: string): Promise<ReservationDetail[]> => {
         const { reservableId, description, schedules, workGroupIds = [], userIds = [], guestIds = [], canOverlap } = data;
 
         const slot = await getSlotById(reservableId);
@@ -219,7 +219,13 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         const participants: Array<{ userId: string | null; guestId: number | null; ownershipPriority: number; status: ParticipantStatus }> = [];
         let priority = 0;
 
+        if (currentUserId) {
+            participants.push({ userId: currentUserId, guestId: null, ownershipPriority: priority++, status: "ACCEPTED" });
+        }
+
+        // ✅ CAMBIO: Marcar al registrador (currentUserId) como ACCEPTED, otros como PENDING
         for (const userId of uniqueUserIds) {
+            if (userId === currentUserId) continue;
             participants.push({ userId, guestId: null, ownershipPriority: priority++, status: "PENDING" });
         }
 
