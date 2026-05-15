@@ -2,9 +2,19 @@
 import { Router } from "express";
 import { OfficeSlotsController } from "./office-slots.controller.js";
 import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/index.js";
+import { makeReservablesRouter } from "./reservables.router.js";
+import { makeReservationsRouter } from "./reservations.router.js";
+import { makeEventsRouter } from "./events.router.js";
+import { makeWorkGroupsRouter } from "./work-groups.router.js";
 
 export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router {
     const router = Router();
+
+    // New split routers
+    router.use("/reservables", makeReservablesRouter(controller));
+    router.use("/reservations", makeReservationsRouter(controller));
+    router.use("/events", makeEventsRouter(controller));
+    router.use("/work-groups", makeWorkGroupsRouter(controller));
 
     // FEATURE 1: OFFICE SLOTS (Espacios de trabajo)
     router.get("/office-slots/available", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getAvailable));
@@ -15,19 +25,24 @@ export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router
     router.delete("/office-slots/:id", authenticate, authorize({ allow: [Roles.ADMIN] }), asyncHandler(controller.remove));
     router.post("/office-slots/:id/block", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.setBlock));
 
-    // FEATURE 2: WORK GROUPS (Grupos de trabajo)
-    router.get("/work-groups", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getWorkGroups));
-
-    // FEATURE 3: RESERVATIONS (Reservaciones)
-    router.get("/me", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyReservations));
-    router.get("/me/friends", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyFriendsReservations));
-    router.get("/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getReservationDetail));
-    router.post("/", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.createReservations));
-    router.patch("/participants/:id/status", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.updateParticipantStatus));
+    // FEATURE 2: EVENTS (Eventos)
+    router.get("/events", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getEvents));
+    router.get("/events/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getEventById));
+    router.post("/events", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.createEvent));
 
     // METADATA ENDPOINTS (Metadata para clientes)
     router.get("/users", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getUsers));
     router.get("/guests", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getGuests));
+
+    // FEATURE 3: WORK GROUPS (Grupos de trabajo)
+    router.get("/work-groups", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getWorkGroups));
+
+    // FEATURE 4: RESERVATIONS (Reservaciones)
+    router.get("/me", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyReservations));
+    router.get("/me/friends", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyFriendsReservations));
+    router.get("/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getReservationDetail));
+    router.post("/", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.createReservations));
+    router.patch("/participants/:pid/status", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.updateParticipantStatus));
 
     return router;
 }

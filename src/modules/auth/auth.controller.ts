@@ -32,7 +32,7 @@ export function makeAuthController(service: AuthService): AuthController {
             httpOnly: true,
             secure: isProd,
             sameSite: "strict",
-            maxAge: HOUR_MS * 8
+            maxAge: HOUR_MS * 0.25, // 15 minutes
         });
 
         GlobalResponse.okWithData(res, user, "Login exitoso");
