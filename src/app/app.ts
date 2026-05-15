@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from '../middleware/index.js';
+import morgan from "morgan"
 
 export type AppContainer = {
   authRouter: Router;
@@ -31,6 +32,7 @@ export function createApp(container: AppContainer) {
   }));
   app.use(express.json());
   app.use(cookieParser());
+  app.use(morgan("combined"))
 
   const router = Router();
 
@@ -48,7 +50,9 @@ export function createApp(container: AppContainer) {
   router.use('/reservations', container.officeSlotsRouter);
   router.use('/parking', container.parkingSlotsRouter);
 
+
   app.use('/api', router);
+
   app.use(errorHandler);
 
   return app;
