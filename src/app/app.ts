@@ -22,7 +22,7 @@ export type AppContainer = {
 export function createApp(container: AppContainer) {
   const app = express();
 
-  const allowedOrigins = ["http://localhost:3000", "https://workhubmty-backend-production.up.railway.app/"];
+  const allowedOrigins = ["http://localhost:3000", "https://workhubmty-backend-production.up.railway.app"];
 
   app.use(cors({
     origin: ( origin, callback ) => {
