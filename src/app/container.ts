@@ -5,7 +5,16 @@ import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } fro
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from "../modules/achievements/index.js";
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
+import {
+    makeOfficeSlotsRepo,
+    makeOfficeSlotsService,
+    makeOfficeSlotsController,
+    makeOfficeSlotsRouter,
+    makeReservablesRouter,
+    makeReservationsRouter,
+    makeEventsRouter,
+    makeWorkGroupsRouter,
+} from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
 export function buildContainer() {
@@ -46,11 +55,28 @@ export function buildContainer() {
     const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
     const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
     const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
+    const reservablesRouter = makeReservablesRouter(officeSlotsController);
+    const reservationsRouter = makeReservationsRouter(officeSlotsController);
+    const eventsRouter = makeEventsRouter(officeSlotsController);
+    const workGroupsRouter = makeWorkGroupsRouter(officeSlotsController);
 
     const parkingSlotsRepo = makeParkingSlotsRepo(db);
     const parkingSlotsService = makeParkingSlotsService(parkingSlotsRepo);
     const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
     const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
 
-    return { roleRouter, userRouter, notificationRouter, authRouter, friendshipRouter, achievementsRouter, officeSlotsRouter, parkingSlotsRouter };
+    return {
+        roleRouter,
+        userRouter,
+        notificationRouter,
+        authRouter,
+        friendshipRouter,
+        achievementsRouter,
+        officeSlotsRouter,
+        reservablesRouter,
+        reservationsRouter,
+        eventsRouter,
+        workGroupsRouter,
+        parkingSlotsRouter,
+    };
 };

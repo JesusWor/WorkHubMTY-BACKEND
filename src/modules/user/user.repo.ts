@@ -97,7 +97,7 @@ export function makeUserRepo(db: Db): UserRepo {
         const { rows } = await db.query(`
             SELECT *
             FROM users
-            WHERE id = ?`, [insertId]);
+            WHERE eId = ?`, [insertId]);
 
         return rows[0];
 
