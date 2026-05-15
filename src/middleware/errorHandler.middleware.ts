@@ -22,10 +22,11 @@ export const errorHandler = (
 
   // Known app errors
   if (err instanceof AppError) {
-    if (isProd){
-        GlobalResponse.fail(res, err.code ?? "", err.statusCode);
+    console.log(`AppError: ${err.message} (code: ${err.code}, status: ${err.statusCode})`);
+    if (isProd) {
+      GlobalResponse.fail(res, err.code ?? "", err.statusCode);
     } else {
-        GlobalResponse.fail(res, err.message, err.statusCode);
+      GlobalResponse.fail(res, err.message, err.statusCode);
     }
     return;
   }
@@ -34,9 +35,9 @@ export const errorHandler = (
   if (err instanceof Error) {
     console.error(err.stack);
     if (isProd) {
-        GlobalResponse.serverError(res);
+      GlobalResponse.serverError(res);
     } else {
-        GlobalResponse.serverError(res, err.message);
+      GlobalResponse.serverError(res, err.message);
     }
     return;
   }
@@ -44,6 +45,6 @@ export const errorHandler = (
   GlobalResponse.serverError(res);
 };
 
-export const asyncHandler = (fn: any) => 
+export const asyncHandler = (fn: any) =>
   (req: Request, res: Response, next: NextFunction) =>
     Promise.resolve(fn(req, res)).catch(next);

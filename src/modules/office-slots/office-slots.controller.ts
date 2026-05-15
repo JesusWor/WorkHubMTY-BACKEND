@@ -98,9 +98,23 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         GlobalResponse.okWithData(res, detail);
     };
 
+    // ✅ ACTUALIZADO: Obtener userId del usuario autenticado
     const createReservations = async (req: Request, res: Response): Promise<void> => {
         const body = CreateReservationBatchSchema.parse(req.body);
-        const reservations = await service.createReservationBatch(body);
+
+        // ✅ Obtener el userId del usuario autenticado
+        const currentUserId = req.user?.eId;
+
+        if (!currentUserId) {
+            GlobalResponse.badRequest(res, "User not authenticated");
+            return;
+        }
+
+        // ✅ Pasar currentUserId al servicio para marcar como ACCEPTED
+        console.log("Llego:", body);
+        console.log("Creating reservations for user:", currentUserId);
+        const reservations = await service.createReservationBatch(body, currentUserId);
+        console.log("Reservations created:", reservations);
         GlobalResponse.created(res, reservations);
     };
 
