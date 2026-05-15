@@ -1,5 +1,5 @@
 import { createDb } from "../infra/db/db.js";
-import { makeNotificationRouter, makeNotificationController, makeNotificationService } from "../modules/notifications/index.js";
+import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
 import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } from "../modules/user/index.js";
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
@@ -41,9 +41,10 @@ export function buildContainer() {
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController);
 
-    const notificationService = makeNotificationService();
-    const notificationController = makeNotificationController(notificationService);
-    const notificationRouter = makeNotificationRouter(notificationController);
+    const notificationRepo = makeNotificationsRepo(db);
+    const notificationService = makeNotificationsService(notificationRepo);
+    const notificationController = makeNotificationsController(notificationService);
+    const notificationRouter = makeNotificationsRouter(notificationController);
 
     const authRepo = makeAuthRepo(db);
     const authService = makeAuthService(authRepo);

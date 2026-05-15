@@ -1,48 +1,124 @@
 import { Request, Response } from "express";
-import { NotificationService } from "./notifications.schema.js";
+import { NotificationsService } from "./notifications.service.js";
+import {
+    ListNotificationsQuerySchema,
+    MarkReadInputSchema,
+    DeleteNotificationsInputSchema,
+    UpdatePreferencesInputSchema,
+} from "./notifications.schema.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 
-export function makeNotificationController(notificationService : NotificationService) {
-  const subscribe = (req: Request, res: Response) => {
-    const { userId, role } = req.body;
-    notificationService.subscribeUser(userId, role);
-    res.json({ message: "User subscribed to notifications" });
-  }
+export type NotificationsController = {
+    getByUser: (req: Request, res: Response) => Promise<void>;
+    getUnreadCount: (req: Request, res: Response) => Promise<void>;
+    markAsRead: (req: Request, res: Response) => Promise<void>;
+    markAllAsRead: (req: Request, res: Response) => Promise<void>;
+    deleteNotifications: (req: Request, res: Response) => Promise<void>;
+    deleteAllNotifications: (req: Request, res: Response) => Promise<void>;
+    getPreferences: (req: Request, res: Response) => Promise<void>;
+    updatePreferences: (req: Request, res: Response) => Promise<void>;
+};
 
-  const send = (req: Request, res: Response) => {
-    const { title, message, users, roles } = req.body;
-    const notif = notificationService.createNotification(
-      title,
-      message,
-      users,
-      roles
-    );
-    res.json(notif);
-  }
+export function makeNotificationsController(service: NotificationsService): NotificationsController {
+    const getUserId = (req: Request): string | null =>
+        (req as any).user?.e_id ?? null;
 
-  const getUserNotifications = (req: Request<{ userId: string }>, res: Response) => {
-    const { userId } = req.params;
-    const data = notificationService.getUserNotifications(userId);
-    res.json(data);
-  }
+    const getByUser = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
 
-  const markAsRead = (req: Request<{ id: string }>, res: Response) => {
-    const { id } = req.params;
-    const { userId } = req.body;
-    notificationService.markAsRead(id, userId);
-    res.json({ message: "Notification read" });
-  }
+        const parsed = ListNotificationsQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+            GlobalResponse.badRequest(res, parsed.error.issues.map((i) => i.message).join(", "));
+            return;
+        }
 
-  const deleteNotification = (req: Request<{ id: string }>, res: Response) => {
-    const { id } = req.params;
-    notificationService.deleteNotification(id);
-    res.json({ message: "Deleted" });
-  }
+        const notifications = await service.getByUser(userId, parsed.data);
+        GlobalResponse.okWithData(res, notifications);
+    };
 
-  return {
-    subscribe,
-    send,
-    getUserNotifications,
-    markAsRead,
-    deleteNotification
-  }
+    const getUnreadCount = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        const result = await service.getUnreadCount(userId);
+        GlobalResponse.okWithData(res, result);
+    };
+
+    const markAsRead = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        const parsed = MarkReadInputSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.badRequest(res, parsed.error.issues.map((i) => i.message).join(", "));
+            return;
+        }
+
+        await service.markAsRead(userId, parsed.data);
+        GlobalResponse.ok(res, "Notifications marked as read");
+    };
+
+    const markAllAsRead = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        await service.markAllAsRead(userId);
+        GlobalResponse.ok(res, "All notifications marked as read");
+    };
+
+    const deleteNotifications = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        const parsed = DeleteNotificationsInputSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.badRequest(res, parsed.error.issues.map((i) => i.message).join(", "));
+            return;
+        }
+
+        await service.deleteNotifications(userId, parsed.data);
+        GlobalResponse.ok(res, "Notifications deleted");
+    };
+
+    const deleteAllNotifications = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        await service.deleteAllNotifications(userId);
+        GlobalResponse.ok(res, "All notifications deleted");
+    };
+
+    const getPreferences = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        const prefs = await service.getPreferences(userId);
+        GlobalResponse.okWithData(res, prefs);
+    };
+
+    const updatePreferences = async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!userId) { GlobalResponse.badRequest(res, "User not authenticated"); return; }
+
+        const parsed = UpdatePreferencesInputSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.badRequest(res, parsed.error.issues.map((i) => i.message).join(", "));
+            return;
+        }
+
+        await service.updatePreferences(userId, parsed.data);
+        GlobalResponse.ok(res, "Preferences updated");
+    };
+
+    return {
+        getByUser,
+        getUnreadCount,
+        markAsRead,
+        markAllAsRead,
+        deleteNotifications,
+        deleteAllNotifications,
+        getPreferences,
+        updatePreferences,
+    };
 }
