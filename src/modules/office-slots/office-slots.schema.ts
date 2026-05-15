@@ -114,17 +114,15 @@ export const GetEventsQuerySchema = z.object({
 // ─── Office Slots ───────────────────────────────────────────────────────────────
 
 export const CreateOfficeSlotSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1),
   capacity: z.number().int().positive(),
   floor_id: z.number().int().positive(),
 });
 
 export const UpdateOfficeSlotSchema = z.object({
-  name: z.string().optional(),
+  name: z.string().min(1).optional(),
   capacity: z.number().int().positive().optional(),
   floor_id: z.number().int().positive().optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: "At least one field must be provided",
 });
 
 export const BlockSlotBodySchema = z.object({
@@ -170,16 +168,31 @@ export const FriendOccupancySchema = z.object({
 export const SlotAvailabilityResultSchema = z.object({
   id: z.number(),
   name: z.string(),
+  code: z.string().optional(),
   capacity: z.number(),
   floor_id: z.number(),
   floor_name: z.string(),
   is_blocked: z.boolean(),
   is_available: z.boolean(),
+  status: z.enum(["available", "occupied", "soon"]).optional(),
+  statusLabel: z.string().optional(),
+  timeline: z.array(
+    z.object({
+      id: z.string(),
+      start: z.string(),
+      end: z.string(),
+      status: z.enum(["free", "occupied", "search"]),
+    }),
+  ).optional(),
   occupied_by_friends: z.array(FriendOccupancySchema),
 });
 
 export const SlotIdParamSchema = z.object({
   id: z.coerce.number().int().positive(),
+});
+
+export const ParticipantIdParamSchema = z.object({
+  pid: z.coerce.number().int().positive(),
 });
 
 export const ReservationSummarySchema = z.object({

@@ -7,7 +7,16 @@ import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } fro
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
 import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from '../modules/achievements/index.js';
 import { makeNotificationRouter, makeNotificationController, makeNotificationService } from '../modules/notifications/index.js';
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
+import {
+  makeOfficeSlotsRepo,
+  makeOfficeSlotsService,
+  makeOfficeSlotsController,
+  makeOfficeSlotsRouter,
+  makeReservablesRouter,
+  makeReservationsRouter,
+  makeEventsRouter,
+  makeWorkGroupsRouter,
+} from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
 /**
@@ -78,6 +87,10 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
   const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
   const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
+  const reservablesRouter = makeReservablesRouter(officeSlotsController);
+  const reservationsRouter = makeReservationsRouter(officeSlotsController);
+  const eventsRouter = makeEventsRouter(officeSlotsController);
+  const workGroupsRouter = makeWorkGroupsRouter(officeSlotsController);
 
   const parkingSlotsRepo = makeParkingSlotsRepo(db);
   const parkingSlotsService = makeParkingSlotsService(parkingSlotsRepo);
@@ -93,6 +106,10 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     friendshipRouter,
     achievementsRouter,
     officeSlotsRouter,
+    reservablesRouter,
+    reservationsRouter,
+    eventsRouter,
+    workGroupsRouter,
     parkingSlotsRouter,
     fakeAuthenticate,
   };

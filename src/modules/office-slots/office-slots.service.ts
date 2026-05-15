@@ -42,11 +42,30 @@ export type OfficeSlotsService = {
     getMyFriendsReservations: (userId: string) => Promise<FriendReservationsSummary>;
     // ─── Events ───────────────────────────────────────────────────────────────────
     getEvents: (query: GetEventsQuery) => Promise<Event[]>;
+    getEventById: (id: number) => Promise<Event>;
     createEvent: (data: CreateEventBody) => Promise<Event>;
 };
 
 export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?: FriendshipService, userService?: UserService): OfficeSlotsService {
     // FEATURE 1: OFFICE SLOTS (Espacios de trabajo)
+    const toHourMinute = (iso: string): string => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toISOString().slice(11, 16);
+    };
+
+    const deriveStatus = (row: { is_blocked: any; is_available: any; current_reservations?: number; capacity: number }) => {
+        if (Boolean(row.is_blocked)) {
+            return { status: "occupied" as const, statusLabel: "Ocupado" };
+        }
+        if (!Boolean(row.is_available)) {
+            return { status: "occupied" as const, statusLabel: "Ocupado" };
+        }
+        if ((row.current_reservations ?? 0) > 0 && (row.current_reservations ?? 0) < row.capacity) {
+            return { status: "soon" as const, statusLabel: "Por comenzar" };
+        }
+        return { status: "available" as const, statusLabel: "Disponible" };
+    };
 
     const getAvailableSlots = async (query: AvailableOfficeSlotsQuery): Promise<SlotAvailabilityResult[]> => {
         const { start_time, end_time, user_id, floor_id } = query;
@@ -54,7 +73,7 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         const rows = await repo.findAvailable(start_time, end_time, { floor_id });
         let friendShipMap: Record<number, FriendOccupancy[]> = {};
 
-        if (user_id && friendshipService) {
+        if (user_id) {
             const slotIds = rows.map((r) => r.id as number);
             const occupancy = await repo.findFriendOccupancy(slotIds, user_id, start_time, end_time);
             for (const occ of occupancy) {
@@ -67,13 +86,23 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         }
 
         return rows.map((r) => ({
+            ...(deriveStatus(r)),
             id: r.id,
             name: r.name,
+            code: r.name,
             capacity: r.capacity,
             floor_id: r.floor_id,
             floor_name: r.floor_name,
             is_blocked: Boolean(r.is_blocked),
             is_available: Boolean(r.is_available),
+            timeline: [
+                {
+                    id: `search-${r.id}`,
+                    start: toHourMinute(start_time),
+                    end: toHourMinute(end_time),
+                    status: Boolean(r.is_available) ? "free" : "occupied",
+                },
+            ],
             occupied_by_friends: friendShipMap[r.id] ?? [],
         }));
     };
@@ -309,6 +338,12 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         return repo.findEvents(query);
     };
 
+    const getEventById = async (id: number): Promise<Event> => {
+        const event = await repo.findEventById(id);
+        if (!event) throw new NotFoundError(`Event ${id} no encontrado`);
+        return event;
+    };
+
     const createEvent = async (data: CreateEventBody): Promise<Event> => {
         // Validate reservable exists when provided
         if (data.reservable_id !== undefined) {
@@ -365,6 +400,7 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         getMyReservations,
         getMyFriendsReservations,
         getEvents,
+        getEventById,
         createEvent,
     };
 }

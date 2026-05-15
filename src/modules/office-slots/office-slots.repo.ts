@@ -111,10 +111,10 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             FROM reservables r
             JOIN floors f ON f.id = r.floor_id
             LEFT JOIN (
-                SELECT reservables_id, COUNT(*) AS cnt
+                SELECT reservable_id, COUNT(*) AS cnt
                 FROM reservations
-                WHERE start_time < ? AND end_time > ? GROUP BY reservables_id)
-            active ON active.reservables_id = r.id
+                WHERE start_time < ? AND end_time > ? GROUP BY reservable_id)
+            active ON active.reservable_id = r.id
             WHERE 1=1 ${extra}
             ORDER BY f.floor_number, r.name`,
             params
@@ -127,10 +127,10 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
         const placeholders = slotIds.map(() => "?").join(",");
         const { rows } = await db.query(`
-            SELECT res.reservables_id AS slot_id, res.user_id, u.name AS user_name, res.start_time, res.end_time
+            SELECT res.reservable_id AS slot_id, res.user_id, u.name AS user_name, res.start_time, res.end_time
             FROM reservations res
             JOIN users u ON u.e_id = res.user_id
-            WHERE res.reservables_id IN (${placeholders})
+            WHERE res.reservable_id IN (${placeholders})
             AND res.start_time < ? AND res.end_time > ? AND res.user_id IN (
                 SELECT CASE
                     WHEN user_low = ? THEN user_high ELSE user_low END
@@ -361,7 +361,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const { rows } = await db.query(
             `SELECT DISTINCT rp.reservations_id
              FROM reservation_participants rp
-             WHERE rp.user_id = ? AND rp.ownership_priority = 1
+             WHERE rp.user_id = ? AND rp.ownership_priority = 0
              ORDER BY rp.reservations_id`,
             [userId],
         );
@@ -374,7 +374,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const { rows } = await db.query(
             `SELECT DISTINCT rp.reservations_id
              FROM reservation_participants rp
-             WHERE rp.user_id IN (${placeholders}) AND rp.ownership_priority = 1
+             WHERE rp.user_id IN (${placeholders}) AND rp.ownership_priority = 0
              ORDER BY rp.reservations_id`,
             userIds,
         );

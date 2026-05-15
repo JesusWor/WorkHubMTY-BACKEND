@@ -9,6 +9,7 @@ import {
     CreateReservationBatchSchema,
     UpdateParticipantStatusSchema,
     SlotIdParamSchema,
+    ParticipantIdParamSchema,
     CreateEventSchema,
     GetEventsQuerySchema,
 } from "./office-slots.schema.js";
@@ -31,6 +32,7 @@ export type OfficeSlotsController = {
     getMyFriendsReservations: (req: Request, res: Response) => Promise<void>;
     // ─── Events ───────────────────────────────────────────────────────────────────
     getEvents: (req: Request, res: Response) => Promise<void>;
+    getEventById: (req: Request, res: Response) => Promise<void>;
     createEvent: (req: Request, res: Response) => Promise<void>;
 }
 
@@ -103,9 +105,9 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
     };
 
     const updateParticipantStatus = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
+        const { pid } = ParticipantIdParamSchema.parse(req.params);
         const body = UpdateParticipantStatusSchema.parse(req.body);
-        const participant = await service.updateParticipantStatus(id, body.status, body.reinvite);
+        const participant = await service.updateParticipantStatus(pid, body.status, body.reinvite);
         GlobalResponse.okWithData(res, participant);
     };
 
@@ -135,6 +137,12 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         const query = GetEventsQuerySchema.parse(req.query);
         const events = await service.getEvents(query);
         GlobalResponse.okWithData(res, events);
+    };
+
+    const getEventById = async (req: Request, res: Response): Promise<void> => {
+        const { id } = SlotIdParamSchema.parse(req.params);
+        const event = await service.getEventById(id);
+        GlobalResponse.okWithData(res, event);
     };
 
     const createEvent = async (req: Request, res: Response): Promise<void> => {
@@ -172,6 +180,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         getMyReservations,
         getMyFriendsReservations,
         getEvents,
+        getEventById,
         createEvent,
     };
 }
