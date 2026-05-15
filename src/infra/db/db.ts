@@ -3,22 +3,23 @@ import mysql from 'mysql2/promise';
 import { env } from '../../config/env.js';
 
 export type Db = {
-    query : (text: string, params?: any[]) => Promise< {rows : any[]}>;
-    execute : (text: string, params?: any[]) => Promise< {affectedCount: number, insertId?: number, rows?:any[]}>;
-    close : () => Promise<void>;
-    testConnection : () => Promise<void>;
+    query: (text: string, params?: any[]) => Promise<{ rows: any[] }>;
+    execute: (text: string, params?: any[]) => Promise<{ affectedCount: number, insertId?: number, rows?: any[] }>;
+    close: () => Promise<void>;
+    testConnection: () => Promise<void>;
 };
 
 const { db: dbEnv } = env
 
-export function createDb() : Db {
+export function createDb(): Db {
     const pool = mysql.createPool({
         host: dbEnv.host,
         user: dbEnv.user,
         password: dbEnv.password,
         database: dbEnv.name,
         port: dbEnv.port,
-        connectionLimit: dbEnv.connectionLimit
+        connectionLimit: dbEnv.connectionLimit,
+        timezone: "Z",
     });
 
     return {
@@ -45,7 +46,7 @@ export function createDb() : Db {
             }
         }
 
-    }; 
+    };
 }
 
 // export function createDbPG(): Db {

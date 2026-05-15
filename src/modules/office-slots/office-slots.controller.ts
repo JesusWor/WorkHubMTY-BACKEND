@@ -2,13 +2,15 @@ import { Request, Response } from "express";
 import { OfficeSlotsService } from "./office-slots.service.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import {
-  CreateOfficeSlotSchema,
-  UpdateOfficeSlotSchema,
-  BlockSlotBodySchema,
-  AvailableOfficeSlotsSchema,
-  CreateReservationBatchSchema,
-  UpdateParticipantStatusSchema,
-  SlotIdParamSchema,
+    CreateOfficeSlotSchema,
+    UpdateOfficeSlotSchema,
+    BlockSlotBodySchema,
+    AvailableOfficeSlotsSchema,
+    CreateReservationBatchSchema,
+    UpdateParticipantStatusSchema,
+    SlotIdParamSchema,
+    CreateEventSchema,
+    GetEventsQuerySchema,
 } from "./office-slots.schema.js";
 
 export type OfficeSlotsController = {
@@ -27,6 +29,9 @@ export type OfficeSlotsController = {
     updateParticipantStatus: (req: Request, res: Response) => Promise<void>;
     getMyReservations: (req: Request, res: Response) => Promise<void>;
     getMyFriendsReservations: (req: Request, res: Response) => Promise<void>;
+    // ─── Events ───────────────────────────────────────────────────────────────────
+    getEvents: (req: Request, res: Response) => Promise<void>;
+    createEvent: (req: Request, res: Response) => Promise<void>;
 }
 
 export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSlotsController {
@@ -37,38 +42,38 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         const slots = await service.getAllSlots({ floor_id });
         GlobalResponse.okWithData(res, slots);
     };
-    
+
     const getAvailable = async (req: Request, res: Response): Promise<void> => {
         const query = AvailableOfficeSlotsSchema.parse(req.query);
         const slots = await service.getAvailableSlots(query);
         GlobalResponse.okWithData(res, slots);
     };
-    
+
     const getById = async (req: Request, res: Response): Promise<void> => {
         const { id } = SlotIdParamSchema.parse(req.params);
         const slot = await service.getSlotById(id);
         GlobalResponse.okWithData(res, slot);
     };
-    
+
     const create = async (req: Request, res: Response): Promise<void> => {
         const body = CreateOfficeSlotSchema.parse(req.body);
         const slot = await service.createSlot(body);
         GlobalResponse.created(res, slot);
     };
-    
+
     const update = async (req: Request, res: Response): Promise<void> => {
         const { id } = SlotIdParamSchema.parse(req.params);
         const body = UpdateOfficeSlotSchema.parse(req.body);
         const slot = await service.updateSlot(id, body);
         GlobalResponse.okWithData(res, slot);
     };
-    
+
     const remove = async (req: Request, res: Response): Promise<void> => {
         const { id } = SlotIdParamSchema.parse(req.params);
         const result = await service.deleteSlot(id);
         GlobalResponse.ok(res, result.message);
     };
-    
+
     const setBlock = async (req: Request, res: Response): Promise<void> => {
         const { id } = SlotIdParamSchema.parse(req.params);
         const body = BlockSlotBodySchema.parse(req.body);
@@ -124,6 +129,20 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         GlobalResponse.okWithData(res, reservations);
     };
 
+    // FEATURE 4: EVENTS (Eventos)
+
+    const getEvents = async (req: Request, res: Response): Promise<void> => {
+        const query = GetEventsQuerySchema.parse(req.query);
+        const events = await service.getEvents(query);
+        GlobalResponse.okWithData(res, events);
+    };
+
+    const createEvent = async (req: Request, res: Response): Promise<void> => {
+        const body = CreateEventSchema.parse(req.body);
+        const event = await service.createEvent(body);
+        GlobalResponse.created(res, event);
+    };
+
     // METADATA ENDPOINTS (Metadata para clientes)
 
     const getUsers = async (req: Request, res: Response): Promise<void> => {
@@ -152,5 +171,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         updateParticipantStatus,
         getMyReservations,
         getMyFriendsReservations,
+        getEvents,
+        createEvent,
     };
 }
