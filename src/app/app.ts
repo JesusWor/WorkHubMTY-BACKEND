@@ -22,7 +22,12 @@ export type AppContainer = {
 export function createApp(container: AppContainer) {
   const app = express();
 
-  const allowedOrigins = ["http://localhost:3000", "https://kaleidoscopic-pony-6861ef.netlify.app"];
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "https://costra.dev",
+    "https://www.costra.dev",
+    "https://kaleidoscopic-pony-6861ef.netlify.app",
+  ];
 
   app.use(cors({
     origin: ( origin, callback ) => {
