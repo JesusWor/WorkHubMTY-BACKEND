@@ -18,6 +18,13 @@ export type AuthController = {
     logout: (req: Request, res: Response) => Promise<void>;
 };
 
+const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none" as const,
+    maxAge: HOUR_MS * 0.25,
+}
+
 export function makeAuthController(service: AuthService): AuthController {
     const login = async (req: Request, res: Response): Promise<void> => {
         const parsed = LoginSchema.safeParse(req.body);
@@ -28,14 +35,9 @@ export function makeAuthController(service: AuthService): AuthController {
 
         const { token, user } = await service.login(parsed.data);
 
-        res.cookie("token", token, {
-            httpOnly: true,
-            secure: isProd,
-            sameSite: "strict",
-            maxAge: HOUR_MS * 0.25, // 15 minutes
-        });
+        res.cookie("token", cookieOptions);
 
-        GlobalResponse.okWithData(res, user, "Login exitoso");
+        GlobalResponse.ok(res, "Login exitoso");
     };
 
     const me = async (req: Request, res: Response): Promise<void> => {
@@ -50,11 +52,7 @@ export function makeAuthController(service: AuthService): AuthController {
 
 
     const logout = async (_req: Request, res: Response): Promise<void> => {
-        res.clearCookie("token", {
-            httpOnly: true,
-            secure: isProd,
-            sameSite: "strict"
-        });
+        res.clearCookie("token", cookieOptions);
         GlobalResponse.ok(res, "Logout exitoso");
     };
 
