@@ -27,6 +27,7 @@ export function createApp(container: AppContainer) {
     "https://costra.dev",
     "https://www.costra.dev",
     "https://kaleidoscopic-pony-6861ef.netlify.app",
+    "https://work-hub-mty-frontend.vercel.app",
   ];
 
   app.use(cors({
