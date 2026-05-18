@@ -1,0 +1,26 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, workhub]
+
+    steps:
+      - name: Update backend repo
+        working-directory: /home/costra/workhubMTY/backend
+        run: |
+          git fetch origin
+          git reset --hard origin/${{ github.ref_name }}
+
+      - name: Rebuild only backend
+        working-directory: /home/costra/workhubMTY
+        run: |
+          docker compose up -d --build --no-deps backend
+
+      - name: Check backend logs
+        run: |
+          docker logs --tail=80 whmty-backend
