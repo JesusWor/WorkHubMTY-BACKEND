@@ -8,7 +8,6 @@ import {
     DeleteNotificationsInput,
     UpdatePreferencesInput,
 } from "./notifications.schema.js";
-import { BadRequestError } from "../../shared/errors/AppError.js";
 
 export type NotificationsService = {
     getByUser: (userId: string, query: ListNotificationsQuery) => Promise<Notification[]>;
