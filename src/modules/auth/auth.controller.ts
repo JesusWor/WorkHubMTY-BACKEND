@@ -20,8 +20,7 @@ export type AuthController = {
 
 const cookieOptions : CookieOptions = {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
+    secure: true,
     maxAge: HOUR_MS * 0.25,
 }
 
@@ -52,11 +51,12 @@ export function makeAuthController(service: AuthService): AuthController {
 
 
     const logout = async (_req: Request, res: Response): Promise<void> => {
-        res.clearCookie("token", {
-            httpOnly: true,
-            secure: isProd,
-            sameSite: "strict"
-        });
+        // res.clearCookie("token", {
+        //     httpOnly: true,
+        //     secure: isProd,
+        //     sameSite: "strict"
+        // });
+        res.clearCookie("token", cookieOptions);
         GlobalResponse.ok(res, "Logout exitoso");
     };
 
