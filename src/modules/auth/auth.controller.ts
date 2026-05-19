@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { CookieOptions, Request, Response } from "express";
 import { AuthService } from "./auth.service.js";
 import { LoginSchema } from "./auth.schema.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
@@ -18,7 +18,7 @@ export type AuthController = {
     logout: (req: Request, res: Response) => Promise<void>;
 };
 
-const cookieOptions = {
+const cookieOptions : CookieOptions = {
     httpOnly: true,
     secure: isProd,
     sameSite: "strict",
@@ -35,7 +35,7 @@ export function makeAuthController(service: AuthService): AuthController {
 
         const { token, user } = await service.login(parsed.data);
 
-        res.cookie("token", cookieOptions);
+        res.cookie("token", token, cookieOptions);
 
         GlobalResponse.okWithData(res, user, "Login exitoso");
     };
