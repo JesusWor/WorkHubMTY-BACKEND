@@ -23,12 +23,17 @@ export type AppContainer = {
 export function createApp(container: AppContainer) {
   const app = express();
 
+  // const allowedOrigins = [
+  //   "http://localhost:3000",
+  //   "https://costra.dev",
+  //   "https://www.costra.dev",
+  //   "https://kaleidoscopic-pony-6861ef.netlify.app",
+  //   "https://work-hub-mty-frontend.vercel.app",
+  // ];
   const allowedOrigins = [
     "http://localhost:3000",
     "https://costra.dev",
     "https://www.costra.dev",
-    "https://kaleidoscopic-pony-6861ef.netlify.app",
-    "https://work-hub-mty-frontend.vercel.app",
   ];
 
   app.use(cors({
@@ -64,6 +69,7 @@ export function createApp(container: AppContainer) {
   router.use('/reservations/events', container.eventsRouter);
   router.use('/reservations/work-groups', container.workGroupsRouter);
   router.use('/parking', container.parkingSlotsRouter);
+  router.use('/reports', container.reportsRouter);
 
 
   app.use('/api', router);
