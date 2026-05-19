@@ -1,41 +1,95 @@
 import { Request, Response } from "express";
 import { ParkingSlotsService } from "./parking-slots.service.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
-import { CreateParkingReservationSchema, ReassignParkingReservationSchema, ParkingIdParamSchema, ParkingAvailabilityQuerySchema } from "./parking-slots.schema.js";
+import {
+    CreateParkingLotSchema,
+    UpdateParkingLotSchema,
+    CreateParkingReservationSchema,
+    ListReservationsQuerySchema,
+    ReservationBucketsQuerySchema,
+    PatchAttendanceSchema,
+    ReservationIdParamSchema,
+} from "./parking-slots.schema.js";
 import { JwtPayload } from "../../shared/schemas/auth.schema.js";
 
 export type ParkingSlotsController = {
-    getAll: (req: Request, res: Response) => Promise<void>;
-    getAvailabilityBetween: (req: Request, res: Response) => Promise<void>;
+    // Parking Lots
+    createLot: (req: Request, res: Response) => Promise<void>;
+    getAllLots: (req: Request, res: Response) => Promise<void>;
+    getLotById: (req: Request, res: Response) => Promise<void>;
+    updateLot: (req: Request, res: Response) => Promise<void>;
+    deleteLot: (req: Request, res: Response) => Promise<void>;
 
-    autoReserveBetween: (req: Request, res: Response) => Promise<void>;
-    reassignParkingReservation: (req: Request, res: Response) => Promise<void>;
-
-    remove: (req: Request, res: Response) => Promise<void>;
+    // Reservations
+    createReservation: (req: Request, res: Response) => Promise<void>;
+    listReservations: (req: Request, res: Response) => Promise<void>;
+    getBuckets: (req: Request, res: Response) => Promise<void>;
+    getReservationDetail: (req: Request, res: Response) => Promise<void>;
+    patchAttendance: (req: Request, res: Response) => Promise<void>;
+    cancelReservation: (req: Request, res: Response) => Promise<void>;
 };
 
-export function makeParkingSlotsController(service: ParkingSlotsService): ParkingSlotsController {
+export function makeParkingSlotsController(
+    service: ParkingSlotsService
+): ParkingSlotsController {
 
-    const getAll = async (_req: Request, res: Response): Promise<void> => {
-        const reservations = await service.getAll();
-        GlobalResponse.okWithData(res, reservations);
-    };
+    // ── Parking Lots ──────────────────────────────────────────────────────────
 
-    const getAvailabilityBetween = async (req: Request, res: Response): Promise<void> => {
-        const parsed = ParkingAvailabilityQuerySchema.safeParse(req.query);
+    const createLot = async (req: Request, res: Response): Promise<void> => {
+        const parsed = CreateParkingLotSchema.safeParse(req.body);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
-
-        const user = req.user as JwtPayload;
-        const { start_time, end_time } = parsed.data;
-
-        const availability = await service.getAvailabilityBetween(start_time, end_time);
-        GlobalResponse.okWithData(res, availability);
+        const lot = await service.createLot(parsed.data);
+        GlobalResponse.created(res, lot);
     };
 
-    const autoReserveBetween = async (req: Request, res: Response): Promise<void> => {
+    const getAllLots = async (_req: Request, res: Response): Promise<void> => {
+        const lots = await service.getAllLots();
+        GlobalResponse.okWithData(res, lots);
+    };
+
+    const getLotById = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const lot = await service.getLotById(parsed.data.id);
+        GlobalResponse.okWithData(res, lot);
+    };
+
+    const updateLot = async (req: Request, res: Response): Promise<void> => {
+        const paramParsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!paramParsed.success) {
+            GlobalResponse.zodError(res, paramParsed.error);
+            return;
+        }
+
+        const bodyParsed = UpdateParkingLotSchema.safeParse(req.body);
+        if (!bodyParsed.success) {
+            GlobalResponse.zodError(res, bodyParsed.error);
+            return;
+        }
+
+        const lot = await service.updateLot(paramParsed.data.id, bodyParsed.data);
+        GlobalResponse.okWithData(res, lot);
+    };
+
+    const deleteLot = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        await service.deleteLot(parsed.data.id);
+        GlobalResponse.ok(res, `Cajón ${parsed.data.id} eliminado`);
+    };
+
+    // ── Reservations ──────────────────────────────────────────────────────────
+
+    const createReservation = async (req: Request, res: Response): Promise<void> => {
         const parsed = CreateParkingReservationSchema.safeParse(req.body);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
@@ -43,49 +97,89 @@ export function makeParkingSlotsController(service: ParkingSlotsService): Parkin
         }
 
         const user = req.user as JwtPayload;
-        const { start_time, end_time } = parsed.data;
-
-        const reservation = await service.autoReserveBetween(user.eId, start_time, end_time);
+        const reservation = await service.createReservation(user, parsed.data);
         GlobalResponse.created(res, reservation);
     };
 
-    const reassignParkingReservation = async (req: Request, res: Response): Promise<void> => {
-        const paramParsed = ParkingIdParamSchema.safeParse(req.params);
+    const listReservations = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ListReservationsQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const reservations = await service.listReservations(parsed.data);
+        GlobalResponse.okWithData(res, { items: reservations });
+    };
+
+    const getBuckets = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationBucketsQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const buckets = await service.getBuckets(parsed.data);
+        GlobalResponse.okWithData(res, { buckets });
+    };
+
+    const getReservationDetail = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const detail = await service.getReservationDetail(parsed.data.id);
+        GlobalResponse.okWithData(res, detail);
+    };
+
+    const patchAttendance = async (req: Request, res: Response): Promise<void> => {
+        const paramParsed = ReservationIdParamSchema.safeParse(req.params);
         if (!paramParsed.success) {
             GlobalResponse.zodError(res, paramParsed.error);
             return;
         }
 
-        const bodyParsed = ReassignParkingReservationSchema.safeParse(req.body);
+        const bodyParsed = PatchAttendanceSchema.safeParse(req.body);
         if (!bodyParsed.success) {
             GlobalResponse.zodError(res, bodyParsed.error);
             return;
         }
 
-        const { id } = paramParsed.data;
-        const { parking_lot_id } = bodyParsed.data;
-
-        const updated = await service.reassignParkingReservation(id, parking_lot_id);
+        const user = req.user as JwtPayload;
+        const updated = await service.patchAttendance(
+            paramParsed.data.id,
+            bodyParsed.data.attendance_status,
+            user
+        );
         GlobalResponse.okWithData(res, updated);
     };
 
-    const remove = async (req: Request, res: Response): Promise<void> => {
-        const parsed = ParkingIdParamSchema.safeParse(req.params);
+    const cancelReservation = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
 
         const user = req.user as JwtPayload;
-        await service.remove(parsed.data.id, user);
-        GlobalResponse.ok(res, `Reservación ${parsed.data.id} eliminada`);
+        const updated = await service.cancelReservation(parsed.data.id, user);
+        GlobalResponse.okWithData(res, updated);
     };
 
     return {
-        getAll,
-        getAvailabilityBetween,
-        autoReserveBetween,
-        reassignParkingReservation,
-        remove,
+        createLot,
+        getAllLots,
+        getLotById,
+        updateLot,
+        deleteLot,
+
+        createReservation,
+        listReservations,
+        getBuckets,
+        getReservationDetail,
+        patchAttendance,
+        cancelReservation,
     };
 }
