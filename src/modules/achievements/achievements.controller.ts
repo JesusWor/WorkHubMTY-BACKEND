@@ -14,6 +14,7 @@ export type AchievementsController = {
     getUserAchievements: (req: Request, res: Response) => Promise<void>;
     getUserStats: (req: Request, res: Response) => Promise<void>;
     getRecentActivity: (req: Request, res: Response) => Promise<void>;
+    getUserSummary: (req: Request, res: Response) => Promise<void>;
 }
 
 export function makeAchievementsController(service: AchievementsService): AchievementsController {
@@ -139,6 +140,21 @@ export function makeAchievementsController(service: AchievementsService): Achiev
         GlobalResponse.okWithData(res, activity);
     };
 
+    const getUserSummary = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const id = String(req.params.id);
+            if (!id) {
+                GlobalResponse.badRequest(res, "User id is required");
+                return;
+            }
+
+            const summary = await service.getUserSummary(id);
+            GlobalResponse.okWithData(res, summary);
+        } catch (error) {
+            GlobalResponse.serverError(res, error instanceof Error ? error.message : undefined);
+        }
+    };
+
     return {
         getAll,
         getById,
@@ -150,5 +166,6 @@ export function makeAchievementsController(service: AchievementsService): Achiev
         getUserAchievements,
         getUserStats,
         getRecentActivity,
+        getUserSummary,
     };
 }

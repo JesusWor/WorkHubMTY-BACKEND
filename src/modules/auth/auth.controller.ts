@@ -21,6 +21,7 @@ export type AuthController = {
 const cookieOptions : CookieOptions = {
     httpOnly: true,
     secure: true,
+    sameSite: "none" as const,
     maxAge: HOUR_MS * 0.25,
 }
 

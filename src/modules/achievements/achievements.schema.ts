@@ -21,6 +21,15 @@ export const CreateAchievementInputSchema = z.object({
         .min(1, "El logro debe tener al menos un nivel"),
 });
 
+export const UserSummarySchema = z.object({
+    points: z.number(),
+    totalAchievements: z.number(),
+    completed: z.number(),
+    inProgress: z.number(),
+    notStarted: z.number(),
+});
+
+export type UserSummary = z.infer<typeof UserSummarySchema>;
 export type Achievements = z.infer<typeof AchievementsSchema>;
 export type AchievementLevel = z.infer<typeof AchievementLevelSchema>;
 export type CreateAchievementInput = z.infer<typeof CreateAchievementInputSchema>;
