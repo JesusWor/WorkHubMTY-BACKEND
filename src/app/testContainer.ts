@@ -6,18 +6,10 @@ import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } fro
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
 import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from '../modules/achievements/index.js';
-import {
-  makeOfficeSlotsRepo,
-  makeOfficeSlotsService,
-  makeOfficeSlotsController,
-  makeOfficeSlotsRouter,
-  makeReservablesRouter,
-  makeReservationsRouter,
-  makeEventsRouter,
-  makeWorkGroupsRouter,
-} from "../modules/office-slots/index.js";
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
+import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
 
 /**
  * Fake authenticate middleware — only for tests
@@ -98,6 +90,11 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
   const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
 
+  const reportsRepo = makeReportsRepo(db);
+  const reportsSlotsService = makeReportsService(reportsRepo);
+  const reportsController = makeReportsController(reportsSlotsService);
+  const reportsRouter = makeReportsRouter(reportsController);
+
   return {
     db,
     authRouter,
@@ -112,6 +109,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     eventsRouter,
     workGroupsRouter,
     parkingSlotsRouter,
+    reportsRouter,
     fakeAuthenticate,
   };
 }
