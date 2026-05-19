@@ -17,6 +17,7 @@ export type AppContainer = {
   workGroupsRouter: Router;
   parkingSlotsRouter: Router;
   achievementsRouter: Router;
+  reportsRouter: Router;
 };
 
 export function createApp(container: AppContainer) {

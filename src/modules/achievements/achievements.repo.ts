@@ -1,5 +1,5 @@
 import { Db } from "../../infra/db/db.js";
-import { Achievements, AchievementLevel, CreateAchievementInput } from "./achievements.schema.js";
+import { Achievements, AchievementLevel, CreateAchievementInput, UserSummary } from "./achievements.schema.js";
 
 export type AchievementsRepo = {
     getAll: () => Promise<Achievements[]>;
@@ -12,6 +12,7 @@ export type AchievementsRepo = {
     getCompletedByUser: (userId: string) => Promise<any[]>;
     getUserStats: (userId: string) => Promise<any>;
     getRecentActivity: (userId: string) => Promise<any>;
+    getUserSummary: (userId: string) => Promise<UserSummary>
 }
 
 export function makeAchievementsRepo(db: Db): AchievementsRepo {
@@ -221,6 +222,29 @@ export function makeAchievementsRepo(db: Db): AchievementsRepo {
         };
     };
 
+    const getUserSummary = async (userId: string): Promise<UserSummary> => {
+        const { rows } = await db.query(
+            `SELECT
+                COALESCE(SUM(ua.progress), 0) AS points,
+                COUNT(a.id) AS totalAchievements,
+                SUM(CASE WHEN ua.progress >= al.max_goal THEN 1 ELSE 0 END) AS completed,
+                SUM(CASE WHEN ua.progress > 0
+                        AND ua.progress < al.max_goal THEN 1 ELSE 0 END) AS inProgress,
+                SUM(CASE WHEN ua.progress IS NULL
+                        OR ua.progress = 0 THEN 1 ELSE 0 END) AS notStarted
+            FROM achievements a
+            LEFT JOIN user_achievements ua
+                ON ua.achievement_id = a.id AND ua.user_id = ?
+            LEFT JOIN (
+                SELECT achievements_id, MAX(progress_required) AS max_goal
+                FROM achievement_levels
+                GROUP BY achievements_id
+            ) al ON al.achievements_id = a.id`,
+            [userId]
+        );
+        return rows[0];
+    };
+
     return {
         getAll,
         getById,
@@ -232,5 +256,6 @@ export function makeAchievementsRepo(db: Db): AchievementsRepo {
         getCompletedByUser,
         getUserStats,
         getRecentActivity,
+        getUserSummary,
     };
 }
