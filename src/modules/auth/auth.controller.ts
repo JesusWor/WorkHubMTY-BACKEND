@@ -37,7 +37,7 @@ export function makeAuthController(service: AuthService): AuthController {
 
         res.cookie("token", cookieOptions);
 
-        GlobalResponse.ok(res, "Login exitoso");
+        GlobalResponse.okWithData(res, user, "Login exitoso");
     };
 
     const me = async (req: Request, res: Response): Promise<void> => {
