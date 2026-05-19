@@ -1,5 +1,5 @@
 import { AchievementsRepo } from "./achievements.repo.js";
-import { Achievements, CreateAchievementInput } from "./achievements.schema.js";
+import { Achievements, CreateAchievementInput, UserSummary } from "./achievements.schema.js";
 import { BadRequestError, ConflictError } from "../../shared/errors/AppError.js";
 
 export type AchievementsService = {
@@ -13,6 +13,7 @@ export type AchievementsService = {
     getCompletedByUser: (userId: string) => Promise<any[]>;
     getUserStats: (userId: string) => Promise<any>;
     getRecentActivity: (userId: string) => Promise<any>;
+    getUserSummary: (userId: string) => Promise<UserSummary>;
 }
 
 export function makeAchievementsService(repo: AchievementsRepo): AchievementsService {
@@ -70,6 +71,10 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getRecentActivity(userId);
     };
 
+    const getUserSummary = async (userId: string): Promise<UserSummary> => {
+        return await repo.getUserSummary(userId);
+    };
+
     return {
         getAll,
         getById,
@@ -81,5 +86,6 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         getCompletedByUser,
         getUserStats,
         getRecentActivity,
+        getUserSummary
     };
 }

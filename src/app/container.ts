@@ -5,17 +5,9 @@ import { makeUserRepo, makeUserService, makeUserController, makeUserRouter } fro
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from "../modules/achievements/index.js";
-import {
-    makeOfficeSlotsRepo,
-    makeOfficeSlotsService,
-    makeOfficeSlotsController,
-    makeOfficeSlotsRouter,
-    makeReservablesRouter,
-    makeReservationsRouter,
-    makeEventsRouter,
-    makeWorkGroupsRouter,
-} from "../modules/office-slots/index.js";
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
+import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
 
 export function buildContainer() {
     const db = createDb();
@@ -65,6 +57,11 @@ export function buildContainer() {
     const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
     const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
 
+    const reportsRepo = makeReportsRepo(db);
+    const reportsSlotsService = makeReportsService(reportsRepo);
+    const reportsController = makeReportsController(reportsSlotsService);
+    const reportsRouter = makeReportsRouter(reportsController);
+
     return {
         roleRouter,
         userRouter,
@@ -78,5 +75,6 @@ export function buildContainer() {
         eventsRouter,
         workGroupsRouter,
         parkingSlotsRouter,
+        reportsRouter
     };
 };
