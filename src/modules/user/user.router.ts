@@ -6,6 +6,23 @@ export function makeUserRouter(controller: UserController): Router {
     const router = Router();
 
     const NOT_GUEST_POLICY: RolePolicy = { deny: [Roles.GUEST] };
+    const ADMIN_ONLY_POLICY: RolePolicy = { allow: [Roles.ADMIN] };
+
+    router.get("/groups", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllGroups));
+    router.get("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGroupById));
+    router.post("/groups", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.createGroup));
+    router.patch("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.updateGroup));
+    router.delete("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.removeGroup));
+    router.get("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGroupById));
+    router.patch("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.addGroupMembers));
+    router.delete("/groups/:groupId/members",   authenticate, authorize(NOT_GUEST_POLICY),  asyncHandler(controller.removeGroupMembers));
+
+
+    router.get("/guests", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllGuests));
+    router.get("/guests/:guestId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGuestById));
+    router.post("/guests", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.createGuest));
+    router.patch("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.updateGuest));
+    router.delete("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.removeGuest));
 
     router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAll));
     router.get("/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getById));
