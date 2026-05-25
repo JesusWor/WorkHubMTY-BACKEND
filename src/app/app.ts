@@ -2,7 +2,7 @@ import express, { Router } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from '../middleware/index.js';
-import morgan from "morgan"
+import morgan from "morgan";
 
 export type AppContainer = {
   authRouter: Router;

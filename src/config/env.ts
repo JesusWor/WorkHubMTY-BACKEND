@@ -58,6 +58,7 @@ export const env = {
     redis: {
         host: requireString('REDIS_HOST'),
         port: requireInt('REDIS_PORT', 6379),
+        password: requireString('REDIS_PASSWORD'),
     },
     auth: {
         jwtSecret: requireString('JWT_SECRET'),
