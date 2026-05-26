@@ -72,7 +72,7 @@ export function createApp(container: AppContainer) {
   router.use('/reports', container.reportsRouter);
 
 
-  app.use('/api', router);
+  app.use('/', router);
 
   app.use(errorHandler);
 
