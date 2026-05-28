@@ -4,11 +4,13 @@ import { GlobalResponse } from "../shared/response/globalresponse.js";
 import { JwtPayloadSchema } from "../shared/schemas/auth.schema.js"
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-  const token = req.cookies?.token;
+  const authHeader = req.headers.authorization;
 
-  if (!token) {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return GlobalResponse.unauthorized(res);
   }
+
+  const token = authHeader.slice(7); // "Bearer "
 
   try {
     const decoded = verifyToken(token);

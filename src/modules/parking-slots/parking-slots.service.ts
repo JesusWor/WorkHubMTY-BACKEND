@@ -17,6 +17,9 @@ import {
 } from "../../shared/errors/AppError.js";
 import { JwtPayload } from "../../shared/schemas/auth.schema.js";
 import { Roles } from "../../middleware/index.js";
+import { Queue } from "bullmq";
+import { NoShowJobData } from "../../infra/queue/parking-queue.js";
+import { ParkingEventsEmitter } from "../../infra/events/parking-events.emitter.js";
 
 const GRACE_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 horas
 const CHECKIN_TOLERANCE_MINUTES = 30;
@@ -95,7 +98,24 @@ async function computeProjection(
     };
 }
 
+// ─── Helpers de queue ─────────────────────────────────────────────────────────
+
+function noShowJobId(reservationId: number): string {
+    return `no-show:${reservationId}`;
+}
+
+function noShowDelay(startTime: Date): number {
+    const triggerAt = startTime.getTime() + CHECKIN_TOLERANCE_MINUTES * 60_000;
+    return Math.max(0, triggerAt - Date.now());
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export type ParkingSlotsServiceDeps = {
+    repo: ParkingSlotsRepo;
+    queue: Queue<NoShowJobData>;
+    emitter: ParkingEventsEmitter;
+};
 
 export type ParkingSlotsService = {
     // Parking Lots
@@ -123,11 +143,11 @@ export type ParkingSlotsService = {
 
     cancelReservation: (id: number, requestingUser: JwtPayload) => Promise<ParkingReservation>;
 
-    // Cron
+    // Cron (mantenido por compatibilidad / uso admin)
     runNoShowSweep: () => Promise<number>;
 };
 
-export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsService {
+export function makeParkingSlotsService({ repo, queue, emitter }: ParkingSlotsServiceDeps): ParkingSlotsService {
 
     // ── Parking Lots ──────────────────────────────────────────────────────────
 
@@ -142,18 +162,21 @@ export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsSer
     const createLot = async (data: CreateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.createLot(data.name, data.capacity, data.priority);
         if (!lot) throw new ConflictError("No fue posible crear el cajón");
+        emitter.emit("lot.created", lot);
         return lot;
     };
 
     const updateLot = async (id: number, data: UpdateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.updateLot(id, data);
         if (!lot) throw new NotFoundError(`El cajón ${id} no existe`);
+        emitter.emit("lot.updated", lot);
         return lot;
     };
 
     const deleteLot = async (id: number): Promise<void> => {
         const deleted = await repo.deleteLot(id);
         if (!deleted) throw new NotFoundError(`El cajón ${id} no existe`);
+        emitter.emit("lot.deleted", id);
     };
 
     // ── Reservations ──────────────────────────────────────────────────────────
@@ -225,6 +248,17 @@ export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsSer
         );
         if (!reservation) throw new ConflictError("No fue posible crear la reservación");
 
+        // Encolar el delayed job de no-show
+        await queue.add(
+            "no-show",
+            { reservationId: reservation.id },
+            {
+                delay: noShowDelay(reservation.start_time),
+                jobId: noShowJobId(reservation.id),
+            }
+        );
+
+        emitter.emit("reservation.created", reservation);
         return reservation;
     };
 
@@ -251,10 +285,13 @@ export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsSer
 
         assertValidAttendanceTransition(reservation.attendance_status, next);
 
-        // CHECKED_IN siempre congela: el usuario ya ocupó el slot físicamente
+        // CHECKED_IN siempre congela: el usuario ya ocupó el slot físicamente.
+        // También cancela el job de no-show porque ya no aplica.
         if (next === "CHECKED_IN") {
             const updated = await repo.updateAttendanceStatus(id, next, true /* freeze */);
             if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+            await queue.remove(noShowJobId(id));
+            emitter.emit("reservation.attendance_updated", updated);
             return updated;
         }
 
@@ -265,12 +302,16 @@ export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsSer
             const withinGrace = now >= startMs - GRACE_PERIOD_MS;
             const updated = await repo.updateAttendanceStatus(id, next, withinGrace);
             if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+            // El job ya no debe ejecutarse si el no-show fue manual
+            await queue.remove(noShowJobId(id));
+            emitter.emit("reservation.attendance_updated", updated);
             return updated;
         }
 
         // CHECKED_OUT: no cambia allocation_state (ya estaba FROZEN por CHECKED_IN)
         const updated = await repo.updateAttendanceStatus(id, next, false);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+        emitter.emit("reservation.attendance_updated", updated);
         return updated;
     };
 
@@ -307,6 +348,10 @@ export function makeParkingSlotsService(repo: ParkingSlotsRepo): ParkingSlotsSer
         const updated = await repo.cancelReservation(id, withinGrace);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
+        // Cancelar el job pendiente de no-show
+        await queue.remove(noShowJobId(id));
+
+        emitter.emit("reservation.canceled", updated);
         return updated;
     };
 

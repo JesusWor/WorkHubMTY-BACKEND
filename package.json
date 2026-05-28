@@ -27,6 +27,8 @@
   "homepage": "https://github.com/JesusWor/WorkHubMTY-BACKEND#readme",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.77.3",
+    "cookie": "^1.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -42,6 +44,7 @@
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie": "^0.6.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
