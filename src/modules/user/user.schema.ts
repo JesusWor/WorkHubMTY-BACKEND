@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+export const UserStatusSchema = z.enum(["online", "idle", "offline"]);
+
 export const UserSchema = z.object({
     eId: z.string(),
     name: z.string(),
     email: z.email(),
-    roleName: z.string()
+    roleName: z.string(),
+    status: UserStatusSchema.default("offline"),
 });
 
 export const CreateUserSchema = UserSchema.extend({

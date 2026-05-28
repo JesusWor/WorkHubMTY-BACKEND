@@ -22,3 +22,25 @@ export type User = {
   name: string;
   role: string;
 };
+
+export type RefreshSession = {
+  id: number;
+  userId: string;
+  tokenHash: string; // SHA-256 hex, 64 chars
+  expiresAt: Date;
+  createdAt: Date;
+  rotatedFrom: number | null;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+  userAgent: string | null;
+  ip: string | null;
+};
+
+export type InsertSessionDto = {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  rotatedFrom: number | null;
+  userAgent: string | null;
+  ip: string | null;
+};

@@ -62,6 +62,8 @@ export const env = {
     },
     auth: {
         jwtSecret: requireString('JWT_SECRET'),
+        accessTokenExpiresMs: requireInt('JWT_ACCESS_TOKEN_EXPIRES_MS', 15 * 60 * 1000), // 15 minutes
+        refreshTokenExpiresMs: requireInt('REFRESH_TOKEN_EXPIRES_MS', 24 * 60 * 60 * 1000) // 24 hours
     },
     mail: {
         host: requireString('SMTP_HOST'),

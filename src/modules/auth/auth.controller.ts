@@ -7,23 +7,33 @@ import { UnauthorizedError } from "../../shared/errors/AppError.js";
 import { env } from "../../config/env.js"
 
 const { nodeEnv } = env.server;
+const REFRESH_TOKEN_EXPIRATION_MS = env.auth.refreshTokenExpiresMs;
 
 const isProd = nodeEnv === 'production';
 
-const HOUR_MS = 1000 * 60 * 60;
+const REFRESH_COOKIE_NAME = "refresh-token";
 
 export type AuthController = {
     login: (req: Request, res: Response) => Promise<void>;
-    me: (req: Request, res: Response) => Promise<void>;
+    refresh: (req: Request, res: Response) => Promise<void>;
     logout: (req: Request, res: Response) => Promise<void>;
 };
 
-const cookieOptions : CookieOptions = {
+const cookieOptions: CookieOptions = {
     httpOnly: true,
-    secure: true,
-    sameSite: "none" as const,
-    maxAge: HOUR_MS * 0.25,
-}
+    secure: isProd,
+    sameSite: "lax" as const,
+    maxAge: REFRESH_TOKEN_EXPIRATION_MS
+};
+
+function getSessionMeta(req: Request) {
+    return {
+        userAgent: req.headers["user-agent"] ?? null,
+        ip: (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+            ?? req.socket.remoteAddress
+            ?? null,
+    };
+};
 
 export function makeAuthController(service: AuthService): AuthController {
     const login = async (req: Request, res: Response): Promise<void> => {
@@ -33,37 +43,42 @@ export function makeAuthController(service: AuthService): AuthController {
             return;
         }
 
-        const { token, user } = await service.login(parsed.data);
+        const { tokens, user } = await service.login(parsed.data, getSessionMeta(req));
 
-        res.cookie("token", token, cookieOptions);
+        res.cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, cookieOptions);
 
-        GlobalResponse.okWithData(res, user, "Login exitoso");
+        GlobalResponse.okWithData(res, { accessToken: tokens.accessToken, user }, "Login exitoso");
     };
 
-    const me = async (req: Request, res: Response): Promise<void> => {
-        const token = req.cookies?.token;
-        if (!token) throw new UnauthorizedError("No autenticado");
+    const refresh = async (req: Request, res: Response): Promise<void> => {
+        const rawRefreshToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
 
-        const payload = verifyToken(token);
-        const user = await service.me(payload.eId);
+        if (!rawRefreshToken) throw new UnauthorizedError("No hay sesión activa");
 
-        GlobalResponse.okWithData(res, user, "Usuario autenticado");
+        const { tokens, user } = await service.refresh(rawRefreshToken, getSessionMeta(req));
+
+        // Rotate
+        res.cookie(REFRESH_COOKIE_NAME, tokens.refreshToken, cookieOptions);
+
+        GlobalResponse.okWithData(res, { accessToken: tokens.accessToken, user }, "Token renovado");
     };
 
 
-    const logout = async (_req: Request, res: Response): Promise<void> => {
-        // res.clearCookie("token", {
-        //     httpOnly: true,
-        //     secure: isProd,
-        //     sameSite: "strict"
-        // });
-        res.clearCookie("token", cookieOptions);
+    const logout = async (req: Request, res: Response): Promise<void> => {
+        const rawRefreshToken: string | undefined = req.cookies?.[REFRESH_COOKIE_NAME];
+
+        if (rawRefreshToken) {
+            // Best-effort revoke — don't throw if token is already gone
+            await service.logout(rawRefreshToken).catch(() => undefined);
+        }
+
+        res.clearCookie(REFRESH_COOKIE_NAME, cookieOptions);
         GlobalResponse.ok(res, "Logout exitoso");
     };
 
     return {
         login,
-        me,
+        refresh,
         logout
     };
 }

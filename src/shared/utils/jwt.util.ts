@@ -1,13 +1,21 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { JwtPayloadSchema, JwtPayload } from "../schemas/auth.schema.js";
 import { AppError } from "../errors/AppError.js";
 import { env } from "../../config/env.js";
 
-const SECRET = env.auth.jwtSecret;
+const {
+  jwtSecret: SECRET,
+  accessTokenExpiresMs: ACCESS_TOKEN_EXPIRES_MS,
+  refreshTokenExpiresMs: REFRESH_TOKEN_EXPIRES_MS
+}= env.auth;
 
-export const generateToken = (payload: JwtPayload): string => {
+
+// Access Token - jwt
+
+export const generateAccessToken = (payload: JwtPayload): string => {
   return jwt.sign(payload, SECRET, {
-    expiresIn: "1d"
+    expiresIn: ACCESS_TOKEN_EXPIRES_MS / 1000, // convert ms to seconds
   });
 };
 
@@ -19,4 +27,14 @@ export const verifyToken = (token: string): JwtPayload => {
   } catch {
     throw new AppError("Invalid or expired token", 401);
   }
+};
+
+// Refresh Token - random string
+
+export const generateRefreshToken = (): string => {
+  return crypto.randomBytes(64).toString("hex");
+};
+
+export const hashRefreshToken = (rawToken: string): string => {
+  return crypto.createHash("sha256").update(rawToken).digest("hex");
 };

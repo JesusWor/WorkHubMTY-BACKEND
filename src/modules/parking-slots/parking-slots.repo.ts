@@ -64,6 +64,28 @@ export type ParkingSlotsRepo = {
      * @param checkinToleranceMinutes minutos de gracia tras start_time para hacer check-in
      */
     markNoShowExpired: (checkinToleranceMinutes: number) => Promise<number>;
+
+    /**
+     * Marca NO_SHOW + FROZEN para una reservación puntual (usada por el BullMQ worker).
+     * Solo actúa si la reservación cumple las condiciones (NOT_ARRIVED + ACTIVE),
+     * evitando race conditions con check-ins manuales.
+     *
+     * @returns { marked: true, reservation } si se aplicó el cambio,
+     *          { marked: false, reason } si ya no aplica.
+     */
+    markNoShowForReservation: (reservationId: number) => Promise<
+        | { marked: true; reservation: ParkingReservation }
+        | { marked: false; reason: string }
+    >;
+
+    /**
+     * Revival: devuelve reservaciones que aún deben recibir un no-show job.
+     * Útil al reiniciar el servidor para re-encolar jobs perdidos.
+     * Sólo retorna reservaciones cuyo trigger time (start_time + toleranceMinutes) está en el futuro.
+     */
+    getPendingNoShowReservations: (checkinToleranceMinutes: number) => Promise<
+        Array<Pick<ParkingReservation, "id" | "start_time">>
+    >;
 };
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
@@ -325,6 +347,54 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         return affectedCount;
     };
 
+    const markNoShowForReservation = async (
+        reservationId: number
+    ): Promise<
+        | { marked: true; reservation: ParkingReservation }
+        | { marked: false; reason: string }
+    > => {
+        // UPDATE condicional — solo actúa si aún está en NOT_ARRIVED + ACTIVE.
+        // Esto previene race conditions con check-ins manuales concurrentes.
+        const { affectedCount } = await db.execute(
+            `UPDATE parking_reservations
+             SET attendance_status = 'NO_SHOW',
+                 allocation_state  = 'FROZEN'
+             WHERE id               = ?
+               AND lifecycle_status  = 'ACTIVE'
+               AND attendance_status = 'NOT_ARRIVED'`,
+            [reservationId]
+        );
+
+        if (affectedCount === 0) {
+            const existing = await getReservationById(reservationId);
+            if (!existing) return { marked: false, reason: "Reservación no encontrada" };
+            return {
+                marked: false,
+                reason: `Estado actual: lifecycle=${existing.lifecycle_status}, attendance=${existing.attendance_status}`,
+            };
+        }
+
+        const updated = await getReservationById(reservationId);
+        if (!updated) return { marked: false, reason: "No se pudo releer la reservación tras el update" };
+
+        return { marked: true, reservation: updated };
+    };
+
+    const getPendingNoShowReservations = async (
+        checkinToleranceMinutes: number
+    ): Promise<Array<Pick<ParkingReservation, "id" | "start_time">>> => {
+        // Reservaciones que aún no han pasado el trigger time
+        const { rows } = await db.query(
+            `SELECT id, start_time
+             FROM parking_reservations
+             WHERE lifecycle_status  = 'ACTIVE'
+               AND attendance_status = 'NOT_ARRIVED'
+               AND DATE_ADD(start_time, INTERVAL ? MINUTE) > NOW()`,
+            [checkinToleranceMinutes]
+        );
+        return rows as Array<Pick<ParkingReservation, "id" | "start_time">>;
+    };
+
     return {
         getAllLots,
         getLotById,
@@ -343,5 +413,7 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         cancelReservation,
         updateAttendanceStatus,
         markNoShowExpired,
+        markNoShowForReservation,
+        getPendingNoShowReservations,
     };
 }
