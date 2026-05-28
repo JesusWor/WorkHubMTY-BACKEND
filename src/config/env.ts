@@ -51,7 +51,7 @@ export const env = {
         host: requireString('DB_HOST'),
         port: requireInt('DB_PORT', 3306),
         user: requireString('DB_USER'),
-        password: requireString('DB_PASSWORD'),
+        password: requireString('DB_USER_PASSWORD'),
         name: requireString('DB_NAME'),
         connectionLimit: requireInt('DB_CONNECTION_LIMIT', 10),
     },
