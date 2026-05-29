@@ -12,7 +12,7 @@ import { parkingQueue } from "../infra/queue/parking-queue.js";
 import { parkingEvents } from "../infra/events/parking-events.emitter.js";
 import { initParkingBroadcaster } from "../infra/events/parking-events.broadcaster.js";
 import { createParkingWorker } from "../infra/queue/parking-worker.js";
-
+import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter} from "../modules/teams/index.js";
 export function buildContainer() {
     const db = createDb();
     db.testConnection();
@@ -80,6 +80,11 @@ export function buildContainer() {
     const reportsController = makeReportsController(reportsSlotsService);
     const reportsRouter = makeReportsRouter(reportsController);
 
+    const teamsRepo = makeTeamsRepo(db);
+    const teamsService = makeTeamsService(teamsRepo);
+    const teamsController = makeTeamsController(teamsService);
+    const teamsRouter = makeTeamsRouter(teamsController);
+
     return {
         roleRouter,
         userRouter,
@@ -93,6 +98,7 @@ export function buildContainer() {
         reservationsRouter,
         eventsRouter,
         workGroupsRouter,
+        teamsRouter,
         parkingSlotsRouter,
         parkingSlotsRepo,
         parkingWorker,
