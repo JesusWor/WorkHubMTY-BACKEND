@@ -101,18 +101,18 @@ export function makeUserRepo(db: Db): UserRepo {
     };
 
     const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => {
-        const { affectedCount, insertId } = await db.execute(`
+        const { affectedCount } = await db.execute(`
             INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
             VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
-
-        if (!affectedCount || !insertId) {
+        
+        if (!affectedCount) {
             throw new ConflictError('El usuario ya existe o no se pudo crear');
         }
 
         const { rows } = await db.query(`
             SELECT *
             FROM users
-            WHERE eId = ?`, [insertId]);
+            WHERE e_id = ?`, [eId]);
 
         return rows[0];
 
