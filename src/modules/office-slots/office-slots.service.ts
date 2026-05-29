@@ -107,10 +107,30 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
         }));
     };
 
-    const getAllSlots = async (filters: { floor_id?: number }): Promise<any[]> => {
-        return repo.findAll(filters);
-    };
+    const getAllSlots = async (filters: { floor_id?: number }): Promise<SlotAvailabilityResult[]> => {
+        const rows = await repo.findAll(filters);
 
+        return rows.map((r) => ({
+            ...(deriveStatus(r)),
+            id: r.id,
+            name: r.name,
+            code: r.name,
+            capacity: r.capacity,
+            floor_id: r.floor_id,
+            floor_name: r.floor_name,
+            is_blocked: Boolean(r.is_blocked),
+            is_available: Boolean(r.is_available),
+            timeline: [
+                {
+                    id: `all-${r.id}`,
+                    start: "",
+                    end: "",
+                    status: Boolean(r.is_available) ? "free" : "occupied",
+                },
+            ],
+            occupied_by_friends: [],
+        }));
+    };
     const getSlotById = async (id: number): Promise<OfficeSlot> => {
         const slot = await repo.findById(id);
         if (!slot) throw new NotFoundError(`Slot ${id} no encontrado`);
