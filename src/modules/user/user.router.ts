@@ -17,7 +17,9 @@ export function makeUserRouter(controller: UserController): Router {
     router.get("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGroupById));
     router.patch("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.addGroupMembers));
     router.delete("/groups/:groupId/members",   authenticate, authorize(NOT_GUEST_POLICY),  asyncHandler(controller.removeGroupMembers));
-
+    
+    // router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAll));
+    router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getUsers));
 
     router.get("/guests", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllGuests));
     router.get("/guests/:guestId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGuestById));
@@ -25,7 +27,6 @@ export function makeUserRouter(controller: UserController): Router {
     router.patch("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.updateGuest));
     router.delete("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.removeGuest));
 
-    router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAll));
     router.get("/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getById));
 
     router.get("/me/friendships", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyFriendships));

@@ -8,6 +8,7 @@ import { mapRole } from "../../middleware/index.js";
 export type UserController = {
     getAll: (req: Request, res: Response) => Promise<void>;
     getById: (req: Request, res: Response) => Promise<void>;
+    getUsers: (req: Request, res: Response) => Promise<void>;
 
     getMyFriendships: (req: Request, res: Response) => Promise<void>;
     getUserFriendships: (req: Request, res: Response) => Promise<void>;
@@ -133,6 +134,13 @@ export function makeUserController(service: UserService): UserController {
         const profile = await service.getFullProfile(requestedEId, auth.authEId);
         GlobalResponse.okWithData(res, profile);
     };
+
+    const getUsers = async (req: Request, res: Response): Promise<void> => {
+        const query = req.query.query ? z.string().parse(req.query.query) : undefined;
+        const excludeId = req.query.excludeId ? z.string().parse(req.query.excludeId) : undefined;
+        const users = await service.getUsers(query, excludeId);
+        GlobalResponse.okWithData(res, users);
+    }
 
     // Groups
 
@@ -309,6 +317,7 @@ export function makeUserController(service: UserService): UserController {
         getUserFullProfile,
         getAllGroups,
         getMyGroups,
+        getUsers,
         getGroupById,
         createGroup,
         updateGroup,

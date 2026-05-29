@@ -23,6 +23,9 @@ export type UserRepo = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
+    // Cristian. Adding getUsers that filters from a query 
+    getUsers: (query?:string, excludeId?:string) => Promise<User[]>;
+
     getAllByName: (name: string) => Promise<User[]>;
     TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => Promise<User>;
 }
@@ -75,6 +78,34 @@ export function makeUserRepo(db: Db): UserRepo {
         );
 
         return rows as Guest[];
+    }
+
+    const getUsers = async (query?:string, excludeId?:string) => {
+        const trimmed = query?.trim();
+        let where = "";
+        let params: any[] = [];
+        if(trimmed){
+            where = "WHERE (name LIKE ? OR email LIKE ?)";
+            params = [`%${trimmed}%`, `%${trimmed}%`];
+        }
+
+        if (excludeId) {
+            where += (where ? " AND" : "WHERE") + " e_id != ?";
+            params.push(excludeId);
+        }
+
+        const {rows} = await db.query(`
+            SELECT
+                e_id AS eId,
+                name,
+                email,
+                role_name AS roleName 
+            FROM public_users_view
+            ${where}
+            LIMIT 100
+         `, params);
+
+         return rows;
     }
 
     const getAllByName = async (query: string): Promise<User[]> => {
@@ -375,6 +406,8 @@ export function makeUserRepo(db: Db): UserRepo {
         getGuestsByIds,
         getAllByName,
         TEMPORARY_CREATE,
+
+        getUsers,
 
         getAllGuests,
         getGuestById,

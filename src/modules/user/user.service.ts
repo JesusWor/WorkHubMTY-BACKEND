@@ -14,6 +14,9 @@ export type UserService = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
+    // Cristian. Adding getUsers that filters from a query 
+    getUsers: (query?:string, excludeId?:string) => Promise<User[]>;
+
     getUserFriends: (userId: string) => Promise<User[]>;
     getAllByName: (name: string) => Promise<User[]>;
     getFullProfile: (requestedEId: string, authEId: string) => Promise<Profile>;
@@ -202,6 +205,11 @@ export function makeUserService(
         return enrichGroupMembers(group);
     };
 
+    const getUsers = async (query?:string, excludeId?:string): Promise<User[]> => {
+        const users = await repo.getUsers(query, excludeId);
+        return enrichWithStatus(users, userStatusService);
+     }
+
     // Guests
 
     const getAllGuests = async (): Promise<Guest[]> => repo.getAllGuests();
@@ -266,5 +274,7 @@ export function makeUserService(
         updateGuest,
         removeGuest,
         TEMPORARY_CREATE,
+
+        getUsers
     };
 }
