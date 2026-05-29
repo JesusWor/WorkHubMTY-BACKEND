@@ -5,7 +5,7 @@ import { FriendshipService } from "../friendship/friendship.service.js";
 import { AchievementsService } from "../achievements/achievements.service.js";
 import { UserStatusService } from "./user-status.service.js";
 import bcrypt from "bcrypt";
-import { ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
+import { BadRequestError, ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
 import { Roles } from "../../middleware/index.js";
 
 export type UserService = {
@@ -20,6 +20,7 @@ export type UserService = {
 
     // Groups
     getAllGroups: () => Promise<WorkGroup[]>;
+    getMyGroups: (authEId: string) => Promise<WorkGroup[]>;
     getGroupById: (groupId: number) => Promise<WorkGroupMembers>;
     createGroup: (name: string, description: string, memberEIds: string[]) => Promise<WorkGroupMembers>;
     updateGroup: (groupId: number, authEId: string, authRole: Roles, name?: string, description?: string) => Promise<WorkGroupMembers>;
@@ -142,6 +143,14 @@ export function makeUserService(
 
     const getAllGroups = async (): Promise<WorkGroup[]> => repo.getAllGroups();
 
+    const getMyGroups = async (authEId: string): Promise<WorkGroup[]> => {
+        if (!authEId) {
+            throw new BadRequestError("User id is required");
+        }
+
+        return repo.getMyGroups(authEId);
+    };
+
     const getGroupById = async (groupId: number): Promise<WorkGroupMembers> => {
         const group = await repo.getGroupById(groupId);
         if (!group) throw new NotFoundError("Grupo no encontrado");
@@ -244,6 +253,7 @@ export function makeUserService(
         getAllByName,
         getFullProfile,
         getAllGroups,
+        getMyGroups,
         getGroupById,
         createGroup,
         updateGroup,

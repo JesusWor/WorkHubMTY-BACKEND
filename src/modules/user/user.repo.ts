@@ -4,6 +4,7 @@ import { NotFoundError, ConflictError, UnprocessableError } from "../../shared/e
 
 export type UserRepo = {
     getAllGroups: () => Promise<WorkGroup[]>;
+    getMyGroups: (userId: string) => Promise<WorkGroup[]>;
     getGroupById: (groupId: number) => Promise<WorkGroupMembers | null>;
     createGroup: (name: string, description: string, userIds: string[]) => Promise<WorkGroupMembers>;
     updateGroup: (groupId: number, name?: string, description?: string) => Promise<WorkGroupMembers | null>;
@@ -86,7 +87,7 @@ export function makeUserRepo(db: Db): UserRepo {
                 `SELECT *
                  FROM public_users_view
                  WHERE name LIKE ?
-                 LIMIT 10`,
+                 LIMIT 100`,
                 [`%${trimmed}%`]
             );
 
@@ -104,7 +105,7 @@ export function makeUserRepo(db: Db): UserRepo {
                 name LIKE ?
                 OR MATCH(name) AGAINST (? IN NATURAL LANGUAGE MODE)
              ORDER BY score DESC
-             LIMIT 10`,
+             LIMIT 100`,
             [trimmed, likeQuery, trimmed]
         );
 
@@ -112,18 +113,18 @@ export function makeUserRepo(db: Db): UserRepo {
     };
 
     const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => {
-        const { affectedCount, insertId } = await db.execute(`
+        const { affectedCount } = await db.execute(`
             INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
             VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
 
-        if (!affectedCount || !insertId) {
+        if (!affectedCount) {
             throw new ConflictError('El usuario ya existe o no se pudo crear');
         }
 
         const { rows } = await db.query(`
             SELECT *
             FROM users
-            WHERE eId = ?`, [insertId]);
+            WHERE e_id = ?`, [eId]);
 
         return rows[0];
 
@@ -225,8 +226,29 @@ export function makeUserRepo(db: Db): UserRepo {
                 wg.description,
                 COUNT(wgm.user_id) AS memberCount
             FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id;
+            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id
+            GROUP BY wg.id;
         `);
+        return rows as WorkGroup[];
+    };
+
+    const getMyGroups = async (userId: string): Promise<WorkGroup[]> => {
+        const { rows } = await db.query(`
+            SELECT
+                wg.id,
+                wg.name,
+                wg.description,
+                COUNT(wgm_all.user_id) AS memberCount
+            FROM work_groups wg
+            INNER JOIN work_group_members wgm_me
+                ON wg.id = wgm_me.work_group_id
+            LEFT JOIN work_group_members wgm_all
+                ON wg.id = wgm_all.work_group_id
+            WHERE wgm_me.user_id = ?
+            GROUP BY wg.id, wg.name, wg.description
+            ORDER BY wg.id DESC;
+        `, [userId]);
+
         return rows as WorkGroup[];
     };
 
@@ -361,6 +383,7 @@ export function makeUserRepo(db: Db): UserRepo {
         removeGuest,
 
         getAllGroups,
+        getMyGroups,
         getGroupById,
         createGroup,
         updateGroup,
