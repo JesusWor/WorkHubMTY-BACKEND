@@ -20,7 +20,7 @@ import {
     CreateEventBody,
     GetEventsQuery,
 } from "./office-slots.schema.js";
-import { NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
+import { ConflictError, NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
 import { FriendshipService } from "../friendship/friendship.service.js";
 import { UserService } from "../user/user.service.js";
 
@@ -255,12 +255,12 @@ export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?
                 ]);
 
                 if (conflictingReservations.length > 0) {
-                    throw new UnprocessableError(
+                    throw new ConflictError(
                         `El espacio ya tiene reservaciones que se empalman en el horario ${schedule.start_time} – ${schedule.end_time}`
                     );
                 }
                 if (conflictingEvents.length > 0) {
-                    throw new UnprocessableError(
+                    throw new ConflictError(
                         `El espacio tiene un evento que se empalma en el horario ${schedule.start_time} – ${schedule.end_time}`
                     );
                 }

@@ -33,7 +33,7 @@ export function makeParkingSlotsRouter(controller: ParkingSlotsController): Rout
 
     router.delete("/reservations/:id", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.cancelReservation));
 
-    // Parking Lots
+    // Parking Slots
 
     router.post("/", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.createLot));
     router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllLots));
