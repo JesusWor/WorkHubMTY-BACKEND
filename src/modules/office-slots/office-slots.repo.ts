@@ -61,25 +61,43 @@ export type OfficeSlotsRepo = {
 
 export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     const findAll = async (filters: { floor_id?: number }): Promise<any[]> => {
-        const conditions: string[] = [];
-        const params: any[] = [];
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-        if (filters.floor_id !== undefined) {
-            conditions.push("r.floor_id = ?");
-            params.push(filters.floor_id);
-        }
+    if (filters.floor_id !== undefined) {
+        conditions.push("r.floor_id = ?");
+        params.push(filters.floor_id);
+    }
 
-        const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-        const { rows } = await db.query(
-            `SELECT r.id, r.name, r.capacity, r.floor_id, r.is_blocked, f.name AS floor_name
-            FROM reservables r
-            JOIN floors f ON f.id = r.floor_id
-            ${where}
-            ORDER BY f.floor_number, r.name`,
-            params
-        );
-        return rows;
-    };
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const { rows } = await db.query(
+        `SELECT 
+            r.id,
+            r.name,
+            r.capacity,
+            r.floor_id,
+            r.is_blocked,
+            f.name AS floor_name,
+            f.floor_number,
+            COALESCE(active.cnt, 0) AS current_reservations,
+            (r.is_blocked = 0 AND COALESCE(active.cnt, 0) < r.capacity) AS is_available
+        FROM reservables r
+        JOIN floors f ON f.id = r.floor_id
+        LEFT JOIN (
+            SELECT reservable_id, COUNT(*) AS cnt
+            FROM reservations
+            WHERE start_time <= NOW()
+              AND end_time > NOW()
+            GROUP BY reservable_id
+        ) active ON active.reservable_id = r.id
+        ${where}
+        ORDER BY f.floor_number, r.name`,
+        params
+    );
+
+    return rows;
+};
 
     const findById = async (id: number): Promise<OfficeSlot | null> => {
         const { rows } = await db.query(

@@ -1,22 +1,22 @@
 import { AchievementsRepo } from "./achievements.repo.js";
-import { Achievements, CreateAchievementInput, UserSummary } from "./achievements.schema.js";
+import { AchievementProgressesByUser, Achievements, AchievementUserData, CreateAchievementInput, UserSummary } from "./achievements.schema.js";
 import { BadRequestError, ConflictError } from "../../shared/errors/AppError.js";
+import { UserRepo } from "../user/user.repo.js";
 
 export type AchievementsService = {
     getAll: () => Promise<Achievements[]>;
     getById: (id: number) => Promise<Achievements | null>;
-    getByCode: (code: string) => Promise<Achievements | null>;
     createAchievement: (input: CreateAchievementInput) => Promise<{ id: number }>;
     updateAchievements: (userId: string, achievementId: number, increment: number) => Promise<void>;
     getRanking: (userId: string) => Promise<any[]>;
-    getUserAchievements: (userId: string) => Promise<any[]>;
+    getUserAchievements: (userId: string) => Promise<AchievementUserData[]>;
     getCompletedByUser: (userId: string) => Promise<any[]>;
     getUserStats: (userId: string) => Promise<any>;
     getRecentActivity: (userId: string) => Promise<any>;
     getUserSummary: (userId: string) => Promise<UserSummary>;
 }
 
-export function makeAchievementsService(repo: AchievementsRepo): AchievementsService {
+export function makeAchievementsService(repo: AchievementsRepo, userRepo: UserRepo): AchievementsService {
 
     const getAll = async (): Promise<Achievements[]> => {
         return await repo.getAll();
@@ -26,14 +26,10 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getById(id);
     };
 
-    const getByCode = async (code: string): Promise<Achievements | null> => {
-        return await repo.getByCode(code);
-    };
-
     const createAchievement = async (input: CreateAchievementInput): Promise<{ id: number }> => {
-        const existing = await repo.getByCode(input.code);
+        const existing = await repo.getById(input.id);
         if (existing) {
-            throw new ConflictError(`Ya existe un logro con el código "${input.code}"`);
+            throw new ConflictError(`Ya existe un logro con el id "${input.id}"`);
         }
 
         return await repo.createAchievement(input);
@@ -55,8 +51,26 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
         return await repo.getRanking(userId);
     };
 
-    const getUserAchievements = async (userId: string): Promise<any[]> => {
-        return await repo.getUserAchievements(userId);
+    const getUserAchievements = async (userId: string): Promise<AchievementUserData[]> => {
+        const userAchievements = await repo.getUserAchievements(userId);
+        // const userData = await userRepo.getById(userId);
+        const userAchievementsData = 
+            userAchievements.map((currentAchievement) => {
+                return {
+                    id:currentAchievement.id,
+                    title:currentAchievement.title,
+                    description:currentAchievement.description,
+                    icon:currentAchievement.icon,
+                    userProgress:
+                    {
+                        current:currentAchievement.progress,
+                        target:currentAchievement.goal,
+                        status:currentAchievement.status
+                    }
+                }
+            }
+        )
+        return userAchievementsData;
     };
 
     const getCompletedByUser = async (userId: string): Promise<any[]> => {
@@ -78,7 +92,6 @@ export function makeAchievementsService(repo: AchievementsRepo): AchievementsSer
     return {
         getAll,
         getById,
-        getByCode,
         createAchievement,
         updateAchievements,
         getRanking,

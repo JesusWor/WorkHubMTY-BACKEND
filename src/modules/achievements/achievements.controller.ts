@@ -6,7 +6,6 @@ import { GlobalResponse } from "../../shared/response/globalresponse.js";
 export type AchievementsController = {
     getAll: (req: Request, res: Response) => Promise<void>;
     getById: (req: Request, res: Response) => Promise<void>;
-    getByCode: (req: Request, res: Response) => Promise<void>;
     createAchievement: (req: Request, res: Response) => Promise<void>;
     updateAchievements: (req: Request, res: Response) => Promise<void>;
     getRanking: (req: Request, res: Response) => Promise<void>;
@@ -37,22 +36,6 @@ export function makeAchievementsController(service: AchievementsService): Achiev
         }
 
         const achievement = await service.getById(id);
-        if (!achievement) {
-            GlobalResponse.notFound(res, "Achievement not found");
-            return;
-        }
-
-        GlobalResponse.okWithData(res, achievement);
-    };
-
-    const getByCode = async (req: Request, res: Response): Promise<void> => {
-        const code = String(req.params.code);
-        if (!code) {
-            GlobalResponse.badRequest(res, "Code is required");
-            return;
-        }
-
-        const achievement = await service.getByCode(code);
         if (!achievement) {
             GlobalResponse.notFound(res, "Achievement not found");
             return;
@@ -108,13 +91,13 @@ export function makeAchievementsController(service: AchievementsService): Achiev
     };
 
     const getUserAchievements = async (req: Request, res: Response): Promise<void> => {
-        const id = String(req.params.id);
-        if (!id) {
-            GlobalResponse.badRequest(res, "User id is required");
+        const eId = String(req.params.eId);
+        if (!eId) {
+            GlobalResponse.badRequest(res, "User eId is required");
             return;
         }
 
-        const achievements = await service.getUserAchievements(id);
+        const achievements = await service.getUserAchievements(eId);
         GlobalResponse.okWithData(res, achievements);
     };
 
@@ -158,7 +141,6 @@ export function makeAchievementsController(service: AchievementsService): Achiev
     return {
         getAll,
         getById,
-        getByCode,
         createAchievement,
         updateAchievements,
         getRanking,
