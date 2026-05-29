@@ -48,7 +48,7 @@ export function createApp(container: AppContainer) {
   }));
   app.use(express.json());
   app.use(cookieParser());
-  app.use(morgan("combined"))
+  // app.use(morgan("combined"))
 
   const router = Router();
 
