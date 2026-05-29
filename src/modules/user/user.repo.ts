@@ -35,7 +35,13 @@ export function makeUserRepo(db: Db): UserRepo {
     }
 
     const getById = async (eId: string): Promise<User | null> => {
-        const { rows } = await db.query("SELECT * FROM public_users_view WHERE e_id = ?", [eId]);
+        const { rows } = await db.query(`
+            SELECT
+                e_id AS eId,
+                name,
+                email,
+                role_name AS roleName 
+            FROM public_users_view WHERE e_id = ?`, [eId]);
         return rows.length > 0 ? rows[0] : null;
     }
 
@@ -45,7 +51,12 @@ export function makeUserRepo(db: Db): UserRepo {
         const placeholders = eIds.map(() => "?").join(",");
 
         const { rows } = await db.query(
-            `SELECT * FROM public_users_view WHERE e_id IN (${placeholders})`,
+            `SELECT 
+            e_id AS eId,
+            name,
+            email,
+            role_name AS roleName 
+            FROM public_users_view WHERE e_id IN (${placeholders})`,
             eIds
         );
 
