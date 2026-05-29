@@ -27,12 +27,13 @@ export function buildContainer() {
     const friendshipController = makeFriendshipController(friendshipService);
     const friendshipRouter = makeFriendshipRouter(friendshipController);
     
+    const userRepo = makeUserRepo(db);
+
     const achievementsRepo = makeAchievementsRepo(db);
-    const achievementsService = makeAchievementsService(achievementsRepo);
+    const achievementsService = makeAchievementsService(achievementsRepo,userRepo);
     const achievementsController = makeAchievementsController(achievementsService);
     const achievementsRouter = makeAchievementsRouter(achievementsController);
     
-    const userRepo = makeUserRepo(db);
     const userStatusService = makeUserStatusService();
     const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
     const userController = makeUserController(userService);
