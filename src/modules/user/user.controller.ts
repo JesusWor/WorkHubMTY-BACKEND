@@ -19,6 +19,7 @@ export type UserController = {
 
     // Groups
     getAllGroups: (req: Request, res: Response) => Promise<void>;
+    getMyGroups: (req: Request, res: Response) => Promise<void>;
     getGroupById: (req: Request, res: Response) => Promise<void>;
     createGroup: (req: Request, res: Response) => Promise<void>;
     updateGroup: (req: Request, res: Response) => Promise<void>;
@@ -137,6 +138,14 @@ export function makeUserController(service: UserService): UserController {
 
     const getAllGroups = async (_req: Request, res: Response): Promise<void> => {
         const groups = await service.getAllGroups();
+        GlobalResponse.okWithData(res, groups);
+    };
+
+    const getMyGroups = async (req: Request, res: Response): Promise<void> => {
+        const auth = requireAuth(req, res);
+        if (!auth) return;
+
+        const groups = await service.getMyGroups(auth.authEId);
         GlobalResponse.okWithData(res, groups);
     };
 
@@ -299,6 +308,7 @@ export function makeUserController(service: UserService): UserController {
         getMyFullProfile,
         getUserFullProfile,
         getAllGroups,
+        getMyGroups,
         getGroupById,
         createGroup,
         updateGroup,

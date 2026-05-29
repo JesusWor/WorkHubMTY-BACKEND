@@ -9,6 +9,7 @@ export function makeUserRouter(controller: UserController): Router {
     const ADMIN_ONLY_POLICY: RolePolicy = { allow: [Roles.ADMIN] };
 
     router.get("/groups", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllGroups));
+    router.get("/groups/me", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyGroups));
     router.get("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGroupById));
     router.post("/groups", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.createGroup));
     router.patch("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.updateGroup));
