@@ -81,7 +81,7 @@ export function buildContainer() {
     const reportsRouter = makeReportsRouter(reportsController);
 
     const teamsRepo = makeTeamsRepo(db);
-    const teamsService = makeTeamsService(teamsRepo);
+    const teamsService = makeTeamsService(teamsRepo, userStatusService);
     const teamsController = makeTeamsController(teamsService);
     const teamsRouter = makeTeamsRouter(teamsController);
 

@@ -2,7 +2,8 @@ import { UserService } from "./user.service.js";
 import { Request, Response } from "express";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
-import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema, CreateGroupSchema, UpdateGroupSchema, GroupMembersBodySchema } from "./user.schema.js";
+import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema } from "./user.schema.js";
+import { CreateGroupSchema, GroupMembersBodySchema, UpdateGroupSchema } from "../teams/teams.schema.js";
 import { mapRole } from "../../middleware/index.js";
 
 export type UserController = {
@@ -21,8 +22,6 @@ export type UserController = {
     // Groups
     getAllGroups: (req: Request, res: Response) => Promise<void>;
     getMyGroups: (req: Request, res: Response) => Promise<void>;
-    getGroupById: (req: Request, res: Response) => Promise<void>;
-    createGroup: (req: Request, res: Response) => Promise<void>;
     updateGroup: (req: Request, res: Response) => Promise<void>;
     removeGroup: (req: Request, res: Response) => Promise<void>;
     addGroupMembers: (req: Request, res: Response) => Promise<void>;
@@ -155,24 +154,6 @@ export function makeUserController(service: UserService): UserController {
 
         const groups = await service.getMyGroups(auth.authEId);
         GlobalResponse.okWithData(res, groups);
-    };
-
-    const getGroupById = async (req: Request, res: Response): Promise<void> => {
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-        const group = await service.getGroupById(groupId);
-        GlobalResponse.okWithData(res, group);
-    };
-
-    const createGroup = async (req: Request, res: Response): Promise<void> => {
-        const parsed = CreateGroupSchema.safeParse(req.body);
-        if (!parsed.success) {
-            GlobalResponse.zodError(res, parsed.error);
-            return;
-        }
-        const { name, description, memberEIds } = parsed.data;
-        const group = await service.createGroup(name, description, memberEIds);
-        GlobalResponse.okWithData(res, group);
     };
 
     const updateGroup = async (req: Request, res: Response): Promise<void> => {
@@ -318,8 +299,6 @@ export function makeUserController(service: UserService): UserController {
         getAllGroups,
         getMyGroups,
         getUsers,
-        getGroupById,
-        createGroup,
         updateGroup,
         removeGroup,
         addGroupMembers,

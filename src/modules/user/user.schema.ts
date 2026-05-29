@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 export const UserStatusSchema = z.enum(["online", "idle", "offline"]);
 
 export const UserSchema = z.object({
@@ -50,43 +49,3 @@ export const UpdateGuestSchema = z.object({
 });
 
 export type UpdateGuest = z.infer<typeof UpdateGuestSchema>;
-
-
-
-export const WorkGroupSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    description: z.string().nullable(),
-    memberCount: z.number().int().nonnegative().optional(),
-});
-
-export type WorkGroup = z.infer<typeof WorkGroupSchema>;
-
-export const WorkGroupMembersSchema = WorkGroupSchema.extend({
-    users: z.array(UserSchema),
-});
-
-export type WorkGroupMembers = z.infer<typeof WorkGroupMembersSchema>;
-
-export const CreateGroupSchema = z.object({
-    name: z.string().min(1),
-    description: z.string().optional().default(""),
-    memberEIds: z.array(z.string().min(1)).min(1),
-});
-
-export type CreateGroup = z.infer<typeof CreateGroupSchema>;
-
-export const UpdateGroupSchema = z.object({
-    name: z.string().min(1).optional(),
-    description: z.string().optional(),
-}).refine(data => data.name !== undefined || data.description !== undefined, {
-    message: "At least one field must be provided"
-});
-
-export type UpdateGroup = z.infer<typeof UpdateGroupSchema>;
-
-export const GroupMembersBodySchema = z.object({
-    memberEIds: z.array(z.string().min(1)).min(1),
-});
-
-export type GroupMembersBody = z.infer<typeof GroupMembersBodySchema>;

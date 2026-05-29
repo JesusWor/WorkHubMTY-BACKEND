@@ -1,12 +1,14 @@
 import { RoleRepo } from "../role/role.repo.js";
 import { UserRepo } from "./user.repo.js";
-import { User, Profile, Guest, WorkGroup, WorkGroupMembers } from "./user.schema.js";
+import { User, Profile, Guest } from "./user.schema.js";
 import { FriendshipService } from "../friendship/friendship.service.js";
 import { AchievementsService } from "../achievements/achievements.service.js";
 import { UserStatusService } from "./user-status.service.js";
 import bcrypt from "bcrypt";
 import { BadRequestError, ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
 import { Roles } from "../../middleware/index.js";
+import { enrichGroupMembers } from "../teams/teams.service.js";
+import { WorkGroup, WorkGroupMembers } from "../teams/teams.schema.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;
@@ -24,8 +26,6 @@ export type UserService = {
     // Groups
     getAllGroups: () => Promise<WorkGroup[]>;
     getMyGroups: (authEId: string) => Promise<WorkGroup[]>;
-    getGroupById: (groupId: number) => Promise<WorkGroupMembers>;
-    createGroup: (name: string, description: string, memberEIds: string[]) => Promise<WorkGroupMembers>;
     updateGroup: (groupId: number, authEId: string, authRole: Roles, name?: string, description?: string) => Promise<WorkGroupMembers>;
     removeGroup: (groupId: number, authEId: string, authRole: Roles) => Promise<boolean>;
     addGroupMembers: (groupId: number, authEId: string, authRole: Roles, memberEIds: string[]) => Promise<WorkGroupMembers>;
@@ -41,7 +41,7 @@ export type UserService = {
     TEMPORARY_CREATE?: (eId: string, name: string, email: string, password: string, role: string) => Promise<User>;
 }
 
-async function enrichWithStatus(users: User[], statusService: UserStatusService): Promise<User[]> {
+export async function enrichWithStatus(users: User[], statusService: UserStatusService): Promise<User[]> {
     if (!users.length) return users;
     const statuses = await statusService.getStatuses(users.map(u => u.eId));
     return users.map(u => ({ ...u, status: statuses.get(u.eId) ?? "offline" }));
@@ -139,11 +139,6 @@ export function makeUserService(
         return group;
     };
 
-    const enrichGroupMembers = async (group: WorkGroupMembers): Promise<WorkGroupMembers> => {
-        const enrichedUsers = await enrichWithStatus(group.users, userStatusService);
-        return { ...group, users: enrichedUsers };
-    };
-
     const getAllGroups = async (): Promise<WorkGroup[]> => repo.getAllGroups();
 
     const getMyGroups = async (authEId: string): Promise<WorkGroup[]> => {
@@ -152,17 +147,6 @@ export function makeUserService(
         }
 
         return repo.getMyGroups(authEId);
-    };
-
-    const getGroupById = async (groupId: number): Promise<WorkGroupMembers> => {
-        const group = await repo.getGroupById(groupId);
-        if (!group) throw new NotFoundError("Grupo no encontrado");
-        return enrichGroupMembers(group);
-    };
-
-    const createGroup = async (name: string, description: string, memberEIds: string[]): Promise<WorkGroupMembers> => {
-        const group = await repo.createGroup(name, description, memberEIds);
-        return enrichGroupMembers(group);
     };
 
     const updateGroup = async (
@@ -175,7 +159,7 @@ export function makeUserService(
         await assertGroupAccess(groupId, authEId, authRole);
         const updated = await repo.updateGroup(groupId, name, description);
         if (!updated) throw new NotFoundError("Grupo no encontrado");
-        return enrichGroupMembers(updated);
+        return enrichGroupMembers(updated, userStatusService);
     };
 
     const removeGroup = async (groupId: number, authEId: string, authRole: Roles): Promise<boolean> => {
@@ -191,7 +175,7 @@ export function makeUserService(
     ): Promise<WorkGroupMembers> => {
         await assertGroupAccess(groupId, authEId, authRole);
         const group = await repo.addGroupMembers(groupId, memberEIds);
-        return enrichGroupMembers(group);
+        return enrichGroupMembers(group, userStatusService);
     };
 
     const removeGroupMembers = async (
@@ -202,7 +186,7 @@ export function makeUserService(
     ): Promise<WorkGroupMembers> => {
         await assertGroupAccess(groupId, authEId, authRole);
         const group = await repo.removeGroupMembers(groupId, memberEIds);
-        return enrichGroupMembers(group);
+        return enrichGroupMembers(group, userStatusService);
     };
 
     const getUsers = async (query?:string, excludeId?:string): Promise<User[]> => {
@@ -262,8 +246,6 @@ export function makeUserService(
         getFullProfile,
         getAllGroups,
         getMyGroups,
-        getGroupById,
-        createGroup,
         updateGroup,
         removeGroup,
         addGroupMembers,

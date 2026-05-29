@@ -1,12 +1,12 @@
 import { Db } from "../../infra/db/db.js";
-import { User, Guest, WorkGroup, WorkGroupMembers } from "./user.schema.js";
+import { User, Guest} from "./user.schema.js";
 import { NotFoundError, ConflictError, UnprocessableError } from "../../shared/errors/AppError.js";
+import { WorkGroup, WorkGroupMembers } from "../teams/teams.schema.js";
 
 export type UserRepo = {
     getAllGroups: () => Promise<WorkGroup[]>;
     getMyGroups: (userId: string) => Promise<WorkGroup[]>;
     getGroupById: (groupId: number) => Promise<WorkGroupMembers | null>;
-    createGroup: (name: string, description: string, userIds: string[]) => Promise<WorkGroupMembers>;
     updateGroup: (groupId: number, name?: string, description?: string) => Promise<WorkGroupMembers | null>;
     removeGroup: (groupId: number) => Promise<boolean>;
     addGroupMembers: (groupId: number, memberEIds: string[]) => Promise<WorkGroupMembers>;
@@ -312,27 +312,6 @@ export function makeUserRepo(db: Db): UserRepo {
         } : null;
     };
 
-    const createGroup = async (name: string, description: string, userIds: string[]): Promise<WorkGroupMembers> => {
-        const { affectedCount, insertId } = await db.execute(`
-            INSERT INTO work_groups (name, description, create_time)
-            VALUES (?, ?, ?);
-        `, [name, description, new Date()]);
-
-        if (!affectedCount || !insertId) {
-            throw new ConflictError('El grupo ya existe o no se pudo crear');
-        }
-
-        const values = userIds.map(() => "(?, ?)").join(", ");
-
-        const params = userIds.flatMap(userId => [insertId, userId]);
-
-        await db.execute(`
-            INSERT INTO work_group_members (work_group_id, user_id)
-            VALUES ${values};
-        `, params);
-
-        return getGroupById(insertId) as Promise<WorkGroupMembers>;
-    };
 
     const updateGroup = async (groupId: number, name?: string, description?: string): Promise<WorkGroupMembers | null> => {
         const fieldsToUpdate: string[] = [];
@@ -418,7 +397,6 @@ export function makeUserRepo(db: Db): UserRepo {
         getAllGroups,
         getMyGroups,
         getGroupById,
-        createGroup,
         updateGroup,
         removeGroup,
         addGroupMembers,
