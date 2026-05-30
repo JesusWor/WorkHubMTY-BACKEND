@@ -65,7 +65,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const friendshipService = makeFriendshipService(friendshipRepo);
 
   const achievementsRepo = makeAchievementsRepo(db);
-  const achievementsService = makeAchievementsService(achievementsRepo);
+  const achievementsService = makeAchievementsService(achievementsRepo, userRepo);
   const achievementsController = makeAchievementsController(achievementsService);
   const achievementsRouter = makeAchievementsRouter(achievementsController);
 
@@ -94,6 +94,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const parkingSlotsRepo = makeParkingSlotsRepo(db);
   const parkingSlotsService = makeParkingSlotsService({
     repo: parkingSlotsRepo,
+    friendshipService: friendshipService,
     queue: parkingQueue,
     emitter: parkingEvents,
   });
