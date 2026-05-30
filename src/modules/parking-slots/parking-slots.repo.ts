@@ -31,6 +31,7 @@ export type ParkingSlotsRepo = {
     // Reservations - queries
     listReservations: (query: ListReservationsQuery) => Promise<ParkingReservation[]>;
     getReservationById: (id: number) => Promise<ParkingReservation | null>;
+    getReservationsByUser: (userId: string) => Promise<ParkingReservation[]>;
     getReservationByIdAndUser: (id: number, userId: string) => Promise<ParkingReservation | null>;
 
     /**
@@ -216,6 +217,18 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
             [id]
         );
         return rows.length ? (rows[0] as ParkingReservation) : null;
+    };
+
+    const getReservationsByUser = async (userId: string): Promise<ParkingReservation[]> => {
+        const { rows } = await db.query(
+            `SELECT
+                id, user_id, start_time, end_time,
+                lifecycle_status, attendance_status, allocation_state,
+                canceled_at, created_at, updated_at
+             FROM parking_reservations WHERE user_id = ?`,
+            [userId]
+        );
+        return rows as ParkingReservation[];
     };
 
     const getReservationByIdAndUser = async (
@@ -404,6 +417,7 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
         listReservations,
         getReservationById,
+        getReservationsByUser,
         getReservationByIdAndUser,
         hasActiveReservation,
         getOverlaps,

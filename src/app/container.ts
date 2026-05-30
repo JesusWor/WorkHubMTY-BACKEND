@@ -61,6 +61,7 @@ export function buildContainer() {
     const parkingSlotsRepo = makeParkingSlotsRepo(db);
     const parkingSlotsService = makeParkingSlotsService({
         repo: parkingSlotsRepo,
+        friendshipService,
         queue: parkingQueue,
         emitter: parkingEvents,
     });

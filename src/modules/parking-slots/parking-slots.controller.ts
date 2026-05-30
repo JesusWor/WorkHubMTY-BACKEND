@@ -11,6 +11,8 @@ import {
     ReservationIdParamSchema,
 } from "./parking-slots.schema.js";
 import { JwtPayload } from "../../shared/schemas/auth.schema.js";
+import { Roles } from "../../middleware/index.js";
+import { mapRole } from "../../shared/utils/role.util.js";
 
 export type ParkingSlotsController = {
     // Parking Lots
@@ -24,6 +26,7 @@ export type ParkingSlotsController = {
     createReservation: (req: Request, res: Response) => Promise<void>;
     listReservations: (req: Request, res: Response) => Promise<void>;
     getBuckets: (req: Request, res: Response) => Promise<void>;
+    getMyReservations: (req: Request, res: Response) => Promise<void>;
     getReservationDetail: (req: Request, res: Response) => Promise<void>;
     patchAttendance: (req: Request, res: Response) => Promise<void>;
     cancelReservation: (req: Request, res: Response) => Promise<void>;
@@ -123,6 +126,17 @@ export function makeParkingSlotsController(
         GlobalResponse.okWithData(res, { buckets });
     };
 
+    const getMyReservations = async (req: Request, res: Response): Promise<void> => {
+        const eId = req.user?.eId;
+        if (!eId) {
+            GlobalResponse.unauthorized(res);
+            return;
+        }
+
+        const reservations = await service.getUserReservations(eId);
+        GlobalResponse.okWithData(res, reservations);
+    };
+
     const getReservationDetail = async (req: Request, res: Response): Promise<void> => {
         const parsed = ReservationIdParamSchema.safeParse(req.params);
         if (!parsed.success) {
@@ -130,7 +144,16 @@ export function makeParkingSlotsController(
             return;
         }
 
-        const detail = await service.getReservationDetail(parsed.data.id);
+        const reqRole = req.user?.role;
+        if (!reqRole) {
+            GlobalResponse.unauthorized(res);
+            return;
+        }
+
+        const isAdmin = mapRole(reqRole) === Roles.ADMIN;
+        const requesterId = isAdmin ? undefined : req.user?.eId;
+
+        const detail = await service.getReservationDetail(parsed.data.id, requesterId);
         GlobalResponse.okWithData(res, detail);
     };
 
@@ -178,6 +201,7 @@ export function makeParkingSlotsController(
         createReservation,
         listReservations,
         getBuckets,
+        getMyReservations,
         getReservationDetail,
         patchAttendance,
         cancelReservation,

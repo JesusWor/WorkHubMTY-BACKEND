@@ -27,6 +27,7 @@ export function makeParkingSlotsRouter(controller: ParkingSlotsController): Rout
 
     router.get("/reservations/", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.listReservations));
     router.get("/reservations/buckets", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getBuckets));
+    router.get("/reservations/me", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyReservations));
     router.get("/reservations/:id", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getReservationDetail));
 
     router.patch("/reservations/:id/attendance", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.patchAttendance));
