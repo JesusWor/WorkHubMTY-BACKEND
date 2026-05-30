@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 export const UserStatusSchema = z.enum(["online", "idle", "offline"]);
 
 export const UserSchema = z.object({
@@ -16,13 +17,11 @@ export const CreateUserSchema = UserSchema.extend({
 export type User = z.infer<typeof UserSchema>;
 export type CreateUser = z.infer<typeof CreateUserSchema>;
 
-// export const UpdateUserSchema = UserSchema.partial().pick({ name: true, email: true, roleName: true });
-// export type UpdateUser = z.infer<typeof UpdateUserSchema>;
-
 export const ProfileSchema = UserSchema.extend({
     friendCount: z.number(),
     achievementCount: z.number(),
-})
+});
+
 export type Profile = z.infer<typeof ProfileSchema>;
 
 export const GuestSchema = z.object({

@@ -1,55 +1,119 @@
 import { Request, Response } from "express";
-import type { TeamsService } from "./teams.service.js";
-import { CreateGroupSchema, teamIdSchema } from "./teams.schema.js";
-import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
+import type { TeamsService } from "./teams.service.js";
+import { CreateTeamSchema, TeamIdSchema, UpdateTeamSchema } from "./teams.schema.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { mapRole } from "../../middleware/index.js";
+
 export type TeamsController = {
-  getTeamMembers: (req: Request, res: Response) => Promise<void>;
-  getTeamById: (req: Request, res: Response) => Promise<void>;
-  createTeam: (req: Request, res: Response) => Promise<void>;
+    getAllTeams: (req: Request, res: Response) => Promise<void>;
+    getMyTeams: (req: Request, res: Response) => Promise<void>;
+    getTeamMembers: (req: Request, res: Response) => Promise<void>;
+    getTeamById: (req: Request, res: Response) => Promise<void>;
+    createTeam: (req: Request, res: Response) => Promise<void>;
+    updateTeam: (req: Request, res: Response) => Promise<void>;
+    removeTeam: (req: Request, res: Response) => Promise<void>;
 };
 
 export function makeTeamsController(service: TeamsService): TeamsController {
-  const parseGroupId = (req: Request, res: Response): number | null => {
-    const parsed = z.coerce
-      .number()
-      .int()
-      .positive()
-      .safeParse(req.params.teamId);
-    if (!parsed.success) {
-      GlobalResponse.badRequest(res, "teamId must be a positive integer");
-      return null;
-    }
-    return parsed.data;
-  };
+    const requireAuth = (req: Request, res: Response) => {
+        const authEId = req.user?.eId;
+        const authRoleRaw = req.user?.role;
+        if (!authEId || !authRoleRaw) {
+            GlobalResponse.unauthorized(res);
+            return null;
+        }
+        return { authEId, authRole: mapRole(authRoleRaw) };
+    };
 
-  const getTeamMembers = async (req: Request, res: Response) => {
-    const teamId = teamIdSchema.parse(req.params.teamId);
-    const members = await service.getTeamMembers(teamId);
-    GlobalResponse.okWithData(res, members);
-  };
+    const parseTeamId = (req: Request, res: Response): number | null => {
+        const parsed = z.coerce.number().int().positive().safeParse(req.params.teamId);
+        if (!parsed.success) {
+            GlobalResponse.badRequest(res, "teamId must be a positive integer");
+            return null;
+        }
+        return parsed.data;
+    };
 
-  const getTeamById = async (req: Request, res: Response): Promise<void> => {
-    const teamId = parseGroupId(req, res);
-    if (teamId === null) return;
-    const team = await service.getTeamById(teamId);
-    GlobalResponse.okWithData(res, team);
-  };
+    const getAllTeams = async (_req: Request, res: Response): Promise<void> => {
+        const teams = await service.getAllTeams();
+        GlobalResponse.okWithData(res, teams);
+    };
 
-  const createTeam = async (req: Request, res: Response): Promise<void> => {
-    const parsed = CreateGroupSchema.safeParse(req.body);
-    if (!parsed.success) {
-      GlobalResponse.zodError(res, parsed.error);
-      return;
-    }
-    const { name, description, memberEIds } = parsed.data;
-    const group = await service.createTeam(name, description, memberEIds);
-    GlobalResponse.okWithData(res, group);
-  };
+    const getMyTeams = async (req: Request, res: Response): Promise<void> => {
+        const auth = requireAuth(req, res);
+        if (!auth) return;
 
-  return {
-    getTeamMembers,
-    getTeamById,
-    createTeam,
-  };
+        const teams = await service.getMyTeams(auth.authEId);
+        GlobalResponse.okWithData(res, teams);
+    };
+
+    const getTeamMembers = async (req: Request, res: Response): Promise<void> => {
+        const teamId = TeamIdSchema.safeParse(req.params.teamId);
+        if (!teamId.success) {
+            GlobalResponse.badRequest(res, "teamId must be a positive string");
+            return;
+        }
+
+        const members = await service.getTeamMembers(teamId.data);
+        GlobalResponse.okWithData(res, members);
+    };
+
+    const getTeamById = async (req: Request, res: Response): Promise<void> => {
+        const teamId = parseTeamId(req, res);
+        if (teamId === null) return;
+
+        const team = await service.getTeamById(teamId);
+        GlobalResponse.okWithData(res, team);
+    };
+
+    const createTeam = async (req: Request, res: Response): Promise<void> => {
+        const parsed = CreateTeamSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const { name, description, memberEIds } = parsed.data;
+        const team = await service.createTeam(name, description, memberEIds);
+        GlobalResponse.okWithData(res, team);
+    };
+
+    const updateTeam = async (req: Request, res: Response): Promise<void> => {
+        const auth = requireAuth(req, res);
+        if (!auth) return;
+
+        const teamId = parseTeamId(req, res);
+        if (teamId === null) return;
+
+        const parsed = UpdateTeamSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const updated = await service.updateTeam(teamId, auth.authEId, auth.authRole, parsed.data);
+        GlobalResponse.okWithData(res, updated);
+    };
+
+    const removeTeam = async (req: Request, res: Response): Promise<void> => {
+        const auth = requireAuth(req, res);
+        if (!auth) return;
+
+        const teamId = parseTeamId(req, res);
+        if (teamId === null) return;
+
+        await service.removeTeam(teamId, auth.authEId, auth.authRole);
+        GlobalResponse.ok(res);
+    };
+
+    return {
+        getAllTeams,
+        getMyTeams,
+        getTeamMembers,
+        getTeamById,
+        createTeam,
+        updateTeam,
+        removeTeam,
+    };
 }

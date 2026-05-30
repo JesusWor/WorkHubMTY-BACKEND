@@ -10,6 +10,7 @@ import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController,
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
+import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 
 import { parkingQueue } from "../infra/queue/parking-queue.js";
 import { parkingEvents } from "../infra/events/parking-events.emitter.js";
@@ -114,6 +115,11 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const reportsController = makeReportsController(reportsSlotsService);
   const reportsRouter = makeReportsRouter(reportsController);
 
+  const teamsRepo = makeTeamsRepo(db);
+  const teamsService = makeTeamsService(teamsRepo, userStatusService);
+  const teamsController = makeTeamsController(teamsService);
+  const teamsRouter = makeTeamsRouter(teamsController);
+
   return {
     db,
     authRouter,
@@ -131,6 +137,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     parkingSlotsRepo,
     parkingWorker,
     reportsRouter,
+    teamsRouter,
     userStatusService,
     fakeAuthenticate,
   };
