@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { UpdateTeamSchema } from '../../../src/modules/teams/teams.schema';
+import { ListTeamsQuerySchema, UpdateTeamSchema } from '../../../src/modules/teams/teams.schema';
 
 describe('UpdateTeamSchema', () => {
     it('acepta solo metadata del team', () => {
@@ -60,5 +60,12 @@ describe('UpdateTeamSchema', () => {
         expect(result.success).toBe(false);
         const messages = result.error?.issues.map((issue) => issue.message) ?? [];
         expect(messages).toContain('Member ids cannot be added and removed in the same request');
+    });
+});
+
+describe('ListTeamsQuerySchema', () => {
+    it('acepta name vacio o ausente', () => {
+        expect(ListTeamsQuerySchema.safeParse({}).success).toBe(true);
+        expect(ListTeamsQuerySchema.safeParse({ name: '  equipo de ventas  ' }).success).toBe(true);
     });
 });

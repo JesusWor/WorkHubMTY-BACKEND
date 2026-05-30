@@ -1,7 +1,14 @@
 import bcrypt from "bcrypt";
 import type { RoleRepo } from "../role/role.repo.js";
 import type { UserRepo } from "./user.repo.js";
-import type { User, Profile, Guest } from "./user.schema.js";
+import type {
+    User,
+    Profile,
+    Guest,
+    ListUsersPage,
+    ListUsersQuery,
+    UserRelationExclude,
+} from "./user.schema.js";
 import type { FriendshipService } from "../friendship/friendship.service.js";
 import type { AchievementsService } from "../achievements/achievements.service.js";
 import type { UserStatusService } from "./user-status.service.js";
@@ -13,7 +20,7 @@ export type UserService = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
-    getUsers: (query?: string, excludeId?: string) => Promise<User[]>;
+    getUsers: (query: ListUsersQuery, authEId: string) => Promise<ListUsersPage>;
 
     getUserFriends: (userId: string) => Promise<User[]>;
     getAllByName: (name: string) => Promise<User[]>;
@@ -38,6 +45,35 @@ async function enrichOneWithStatus(user: User | null, statusService: UserStatusS
     if (!user) return null;
     const status = await statusService.getStatus(user.eId);
     return { ...user, status };
+}
+
+async function resolveExcludedIds(
+    authEId: string,
+    exclude: UserRelationExclude[],
+    excludeIds: string[],
+    friendshipService: FriendshipService,
+): Promise<string[]> {
+    const excluded = new Set<string>(excludeIds);
+
+    const tasks: Promise<string[]>[] = [];
+    if (exclude.includes("friends")) {
+        tasks.push(friendshipService.getFriendIds(authEId));
+    }
+    if (exclude.includes("sent_requests")) {
+        tasks.push(friendshipService.getSentRequests(authEId).then((requests) => requests.map((request) => request.toUser)));
+    }
+    if (exclude.includes("received_requests")) {
+        tasks.push(friendshipService.getReceivedRequests(authEId).then((requests) => requests.map((request) => request.fromUser)));
+    }
+
+    const resolved = await Promise.all(tasks);
+    for (const ids of resolved) {
+        for (const id of ids) {
+            excluded.add(id);
+        }
+    }
+
+    return [...excluded];
 }
 
 export function makeUserService(
@@ -105,9 +141,26 @@ export function makeUserService(
         };
     };
 
-    const getUsers = async (query?: string, excludeId?: string): Promise<User[]> => {
-        const users = await repo.getUsers(query, excludeId);
-        return enrichWithStatus(users, userStatusService);
+    const getUsers = async (query: ListUsersQuery, authEId: string): Promise<ListUsersPage> => {
+        const excludedIds = await resolveExcludedIds(
+            authEId,
+            query.exclude ?? [],
+            query.excludeId ?? [],
+            friendshipService,
+        );
+
+        const page = await repo.listUsers({
+            name: query.name,
+            exclude: query.exclude,
+            excludeId: excludedIds,
+            limit: query.limit,
+            cursor: query.cursor,
+        });
+
+        return {
+            items: await enrichWithStatus(page.items, userStatusService),
+            nextCursor: page.nextCursor,
+        };
     };
 
     const getAllGuests = async (): Promise<Guest[]> => repo.getAllGuests();

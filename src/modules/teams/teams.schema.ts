@@ -3,6 +3,10 @@ import { UserSchema } from "../user/user.schema.js";
 
 export const TeamIdSchema = z.string().min(1);
 
+export const ListTeamsQuerySchema = z.object({
+    name: z.string().optional(),
+});
+
 export const TeamMemberSchema = UserSchema.omit({ status: true });
 
 export const TeamSchema = z.object({
@@ -65,6 +69,7 @@ export const UpdateTeamSchema = z.object({
 });
 
 export type TeamId = z.infer<typeof TeamIdSchema>;
+export type ListTeamsQuery = z.infer<typeof ListTeamsQuerySchema>;
 export type Team = z.infer<typeof TeamSchema>;
 export type TeamMember = z.infer<typeof TeamMemberSchema>;
 export type TeamMembers = z.infer<typeof TeamMembersSchema>;

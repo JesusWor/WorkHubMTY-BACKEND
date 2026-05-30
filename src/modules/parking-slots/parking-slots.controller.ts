@@ -111,8 +111,8 @@ export function makeParkingSlotsController(
             return;
         }
 
-        const reservations = await service.listReservations(parsed.data);
-        GlobalResponse.okWithData(res, { items: reservations });
+        const { items, nextCursor } = await service.listReservations(parsed.data);
+        GlobalResponse.okWithCursor(res, items, nextCursor);
     };
 
     const getBuckets = async (req: Request, res: Response): Promise<void> => {
