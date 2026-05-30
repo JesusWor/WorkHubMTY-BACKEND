@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import type { TeamsService } from "./teams.service.js";
-import { CreateTeamSchema, TeamIdSchema, UpdateTeamSchema } from "./teams.schema.js";
+import { CreateTeamSchema, ListTeamsQuerySchema, TeamIdSchema, UpdateTeamSchema } from "./teams.schema.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { mapRole } from "../../middleware/index.js";
 
@@ -36,7 +36,13 @@ export function makeTeamsController(service: TeamsService): TeamsController {
     };
 
     const getAllTeams = async (_req: Request, res: Response): Promise<void> => {
-        const teams = await service.getAllTeams();
+        const parsed = ListTeamsQuerySchema.safeParse(_req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const teams = await service.getAllTeams(parsed.data.name);
         GlobalResponse.okWithData(res, teams);
     };
 

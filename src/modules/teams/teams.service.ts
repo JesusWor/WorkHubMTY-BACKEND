@@ -6,7 +6,7 @@ import { Roles } from "../../shared/types/role.type.js";
 import type { User } from "../user/user.schema.js";
 
 export type TeamsService = {
-    getAllTeams: () => Promise<Team[]>;
+    getAllTeams: (name?: string) => Promise<Team[]>;
     getMyTeams: (userId: string) => Promise<Team[]>;
     getTeamMembers: (teamId: string) => Promise<TeamMember[]>;
     getTeamById: (teamId: number) => Promise<TeamMembers>;
@@ -44,7 +44,7 @@ export function makeTeamsService(
         return team;
     };
 
-    const getAllTeams = async (): Promise<Team[]> => teamsRepo.getAllTeams();
+    const getAllTeams = async (name?: string): Promise<Team[]> => teamsRepo.getAllTeams(name);
 
     const getMyTeams = async (userId: string): Promise<Team[]> => {
         if (!userId) throw new BadRequestError("User id is required");

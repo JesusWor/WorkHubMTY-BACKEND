@@ -1,6 +1,7 @@
 import { Db } from "../../infra/db/db.js";
-import { User, Guest } from "./user.schema.js";
-import { NotFoundError, ConflictError, UnprocessableError } from "../../shared/errors/AppError.js";
+import { Cursor } from "../../shared/utils/cursor.utils.js";
+import { User, Guest, ListUsersQuery, ListUsersPage, ListUsersCursor, ListUsersCursorSchema } from "./user.schema.js";
+import { ConflictError, UnprocessableError } from "../../shared/errors/AppError.js";
 
 export type UserRepo = {
     getAllGuests: () => Promise<Guest[]>;
@@ -14,31 +15,46 @@ export type UserRepo = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
-    // Cristian. Adding getUsers that filters from a query 
-    getUsers: (query?:string, excludeId?:string) => Promise<User[]>;
+    getUsers: (query?: string, excludeId?: string) => Promise<User[]>;
+    listUsers: (query: ListUsersQuery) => Promise<ListUsersPage>;
 
     getAllByName: (name: string) => Promise<User[]>;
     TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => Promise<User>;
 }
 
-export function makeUserRepo(db: Db): UserRepo {
-    const MIN_NAME_LENGTH_LIKE = 3;
+function uniqueIds(ids: string[]): string[] {
+    return [...new Set(ids)];
+}
 
+type UserSearchRow = {
+    eId: string;
+    name: string;
+    email: string;
+    roleName: string;
+    searchScore: number;
+    normalizedName: string;
+};
+
+export function makeUserRepo(db: Db): UserRepo {
     const getAll = async (): Promise<User[]> => {
         const { rows } = await db.query("SELECT * FROM public_users_view");
         return rows as User[];
-    }
+    };
 
     const getById = async (eId: string): Promise<User | null> => {
-        const { rows } = await db.query(`
+        const { rows } = await db.query(
+            `
             SELECT
                 e_id AS eId,
                 name,
                 email,
-                role_name AS roleName 
-            FROM public_users_view WHERE e_id = ?`, [eId]);
+                role_name AS roleName
+            FROM public_users_view
+            WHERE e_id = ?`,
+            [eId],
+        );
         return rows.length > 0 ? rows[0] : null;
-    }
+    };
 
     const getByIds = async (eIds: string[]): Promise<User[]> => {
         if (!eIds.length) return [];
@@ -46,17 +62,18 @@ export function makeUserRepo(db: Db): UserRepo {
         const placeholders = eIds.map(() => "?").join(",");
 
         const { rows } = await db.query(
-            `SELECT 
-            e_id AS eId,
-            name,
-            email,
-            role_name AS roleName 
-            FROM public_users_view WHERE e_id IN (${placeholders})`,
-            eIds
+            `SELECT
+                e_id AS eId,
+                name,
+                email,
+                role_name AS roleName
+             FROM public_users_view
+             WHERE e_id IN (${placeholders})`,
+            eIds,
         );
 
         return rows as User[];
-    }
+    };
 
     const getGuestsByIds = async (guestIds: number[]): Promise<Guest[]> => {
         if (!guestIds.length) return [];
@@ -65,101 +82,181 @@ export function makeUserRepo(db: Db): UserRepo {
 
         const { rows } = await db.query(
             `SELECT id, name, email, invited_by FROM guests WHERE id IN (${placeholders})`,
-            guestIds
+            guestIds,
         );
 
         return rows as Guest[];
-    }
+    };
 
-    const getUsers = async (query?:string, excludeId?:string) => {
-        const trimmed = query?.trim();
-        let where = "";
-        let params: any[] = [];
-        if(trimmed){
-            where = "WHERE (name LIKE ? OR email LIKE ?)";
-            params = [`%${trimmed}%`, `%${trimmed}%`];
+    const listUsers = async (query: ListUsersQuery): Promise<ListUsersPage> => {
+        const searchTerm = query.name?.trim();
+        const uniqueExcludeIds = uniqueIds(query.excludeId ?? []);
+        const hasLimit = query.limit !== undefined;
+        const limit = query.limit ?? 0;
+        const decodedCursor: ListUsersCursor | null = hasLimit && query.cursor
+            ? Cursor.decode(query.cursor, ListUsersCursorSchema)
+            : null;
+
+        const selectParams: any[] = [];
+        const whereParams: any[] = [];
+        const whereClauses: string[] = [];
+
+        let scoreExpr = "0";
+        if (searchTerm) {
+            scoreExpr = `
+                CASE
+                    WHEN LOWER(u.name) = LOWER(?) THEN 3
+                    WHEN LOWER(u.name) LIKE CONCAT(LOWER(?), '%') THEN 2
+                    WHEN LOWER(u.name) LIKE CONCAT('%', LOWER(?), '%') THEN 1
+                    ELSE 0
+                END
+            `;
+            selectParams.push(searchTerm, searchTerm, searchTerm);
+            whereClauses.push("LOWER(u.name) LIKE CONCAT('%', LOWER(?), '%')");
+            whereParams.push(searchTerm);
         }
 
-        if (excludeId) {
-            where += (where ? " AND" : "WHERE") + " e_id != ?";
-            params.push(excludeId);
+        if (uniqueExcludeIds.length > 0) {
+            const placeholders = uniqueExcludeIds.map(() => "?").join(", ");
+            whereClauses.push(`u.e_id NOT IN (${placeholders})`);
+            whereParams.push(...uniqueExcludeIds);
         }
 
-        const {rows} = await db.query(`
+        const outerClauses: string[] = [];
+        const outerParams: any[] = [];
+        if (decodedCursor) {
+            outerClauses.push(`
+                (
+                    filtered.searchScore < ?
+                    OR (filtered.searchScore = ? AND filtered.normalizedName > LOWER(?))
+                    OR (filtered.searchScore = ? AND filtered.normalizedName = LOWER(?) AND filtered.eId > ?)
+                )
+            `);
+            outerParams.push(
+                decodedCursor.score,
+                decodedCursor.score,
+                decodedCursor.name,
+                decodedCursor.score,
+                decodedCursor.name,
+                decodedCursor.eId,
+            );
+        }
+
+        const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+        const outerWhereClause = outerClauses.length > 0 ? `WHERE ${outerClauses.join(" AND ")}` : "";
+
+        const sql = `
             SELECT
-                e_id AS eId,
-                name,
-                email,
-                role_name AS roleName 
-            FROM public_users_view
-            ${where}
-            LIMIT 100
-         `, params);
+                filtered.eId,
+                filtered.name,
+                filtered.email,
+                filtered.roleName,
+                filtered.searchScore
+            FROM (
+                SELECT
+                    u.e_id AS eId,
+                    u.name,
+                    u.email,
+                    u.role_name AS roleName,
+                    ${scoreExpr} AS searchScore,
+                    LOWER(u.name) AS normalizedName
+                FROM public_users_view u
+                ${whereClause}
+            ) filtered
+            ${outerWhereClause}
+            ORDER BY filtered.searchScore DESC, filtered.normalizedName ASC, filtered.eId ASC
+            ${hasLimit ? "LIMIT ?" : ""}
+        `;
 
-         return rows;
-    }
+        const queryParams = [
+            ...selectParams,
+            ...whereParams,
+            ...outerParams,
+            ...(hasLimit ? [limit + 1] : []),
+        ];
+
+        const { rows } = await db.query(sql, queryParams);
+        const pageRows = (rows as UserSearchRow[]).map((row) => ({
+            ...row,
+            searchScore: Number(row.searchScore),
+        }));
+
+        const items = pageRows.map(({ searchScore: _searchScore, normalizedName: _normalizedName, ...user }) => user) as User[];
+
+        if (!hasLimit) {
+            return { items, nextCursor: null };
+        }
+
+        const hasMore = pageRows.length > limit;
+        const pageItems = hasMore ? pageRows.slice(0, limit) : pageRows;
+        const nextCursor = hasMore && pageItems.length > 0
+            ? Cursor.encode({
+                score: pageItems[pageItems.length - 1].searchScore,
+                name: pageItems[pageItems.length - 1].name,
+                eId: pageItems[pageItems.length - 1].eId,
+            })
+            : null;
+
+        return {
+            items: pageItems.map(({ searchScore: _searchScore, normalizedName: _normalizedName, ...user }) => user) as User[],
+            nextCursor,
+        };
+    };
+
+    const getUsers = async (query?: string, excludeId?: string): Promise<User[]> => {
+        const result = await listUsers({
+            name: query,
+            exclude: [],
+            excludeId: excludeId ? [excludeId] : [],
+            cursor: null,
+        });
+
+        return result.items;
+    };
 
     const getAllByName = async (query: string): Promise<User[]> => {
-        const trimmed = query.trim();
+        const result = await listUsers({
+            name: query,
+            exclude: [],
+            excludeId: [],
+            limit: 100,
+            cursor: null,
+        });
 
-        if (!trimmed) return [];
-
-        if (trimmed.length < MIN_NAME_LENGTH_LIKE) {
-            const { rows } = await db.query(
-                `SELECT *
-                 FROM public_users_view
-                 WHERE name LIKE ?
-                 LIMIT 100`,
-                [`%${trimmed}%`]
-            );
-
-            return rows as User[];
-        }
-
-        const likeQuery = `%${trimmed}%`;
-
-        const { rows } = await db.query(
-            `SELECT 
-                *,
-                MATCH(name) AGAINST (? IN NATURAL LANGUAGE MODE) AS score
-             FROM public_users_view
-             WHERE 
-                name LIKE ?
-                OR MATCH(name) AGAINST (? IN NATURAL LANGUAGE MODE)
-             ORDER BY score DESC
-             LIMIT 100`,
-            [trimmed, likeQuery, trimmed]
-        );
-
-        return rows as User[];
+        return result.items;
     };
 
     const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => {
-        const { affectedCount } = await db.execute(`
+        const { affectedCount } = await db.execute(
+            `
             INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
-            VALUES (?, ?, ?, ?, ?, ?)`, [eId, name, email, hashedPassword, roleId, new Date()]);
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            [eId, name, email, hashedPassword, roleId, new Date()],
+        );
 
         if (!affectedCount) {
-            throw new ConflictError('El usuario ya existe o no se pudo crear');
+            throw new ConflictError("El usuario ya existe o no se pudo crear");
         }
 
-        const { rows } = await db.query(`
+        const { rows } = await db.query(
+            `
             SELECT *
             FROM users
-            WHERE e_id = ?`, [eId]);
+            WHERE e_id = ?`,
+            [eId],
+        );
 
         return rows[0];
-
     };
 
-    // Guests
     const getAllGuests = async (): Promise<Guest[]> => {
         const { rows } = await db.query("SELECT id, name, email, invited_by FROM guests");
         return rows as Guest[];
     };
 
     const getGuestById = async (guestId: number): Promise<Guest | null> => {
-        const { rows } = await db.query(`
+        const { rows } = await db.query(
+            `
             SELECT
                 id,
                 name,
@@ -167,26 +264,34 @@ export function makeUserRepo(db: Db): UserRepo {
                 invited_by
             FROM guests
             WHERE id = ?;
-        `, [guestId]);
+        `,
+            [guestId],
+        );
 
         return rows.length > 0 ? rows[0] : null;
-    }
+    };
 
     const createGuest = async (name: string, email: string, invitedByEId: string): Promise<Guest> => {
-        const { affectedCount, insertId } = await db.execute(`
+        const { affectedCount, insertId } = await db.execute(
+            `
             INSERT INTO guests (name, email, invited_by, create_time)
             VALUES (?, ?, ?, ?);
-        `, [name, email, invitedByEId, new Date()]);
+        `,
+            [name, email, invitedByEId, new Date()],
+        );
 
         if (!affectedCount || !insertId) {
-            throw new ConflictError('El invitado ya existe o no se pudo crear');
+            throw new ConflictError("El invitado ya existe o no se pudo crear");
         }
 
-        const { rows } = await db.query(`
+        const { rows } = await db.query(
+            `
             SELECT *
             FROM guests
             WHERE id = ?;
-        `, [insertId]);
+        `,
+            [insertId],
+        );
 
         return rows[0];
     };
@@ -211,30 +316,39 @@ export function makeUserRepo(db: Db): UserRepo {
         params.push(guestId);
         const setClause = fieldsToUpdate.join(", ");
 
-        const { affectedCount } = await db.execute(`
+        const { affectedCount } = await db.execute(
+            `
             UPDATE guests
             SET ${setClause}
             WHERE id = ?;
-        `, params);
+        `,
+            params,
+        );
 
         if (!affectedCount) {
-            throw new ConflictError('No se actualizó el invitado');
+            throw new ConflictError("No se actualizó el invitado");
         }
 
-        const { rows } = await db.query(`
+        const { rows } = await db.query(
+            `
             SELECT *
             FROM guests
             WHERE id = ?;
-        `, [guestId]);
+        `,
+            [guestId],
+        );
 
         return rows.length > 0 ? rows[0] : null;
     };
 
     const removeGuest = async (guestId: number): Promise<boolean> => {
-        const { affectedCount } = await db.execute(`
+        const { affectedCount } = await db.execute(
+            `
             DELETE FROM guests
             WHERE id = ?;
-        `, [guestId]);
+        `,
+            [guestId],
+        );
 
         return affectedCount > 0;
     };
@@ -244,15 +358,14 @@ export function makeUserRepo(db: Db): UserRepo {
         getById,
         getByIds,
         getGuestsByIds,
+        getUsers,
+        listUsers,
         getAllByName,
         TEMPORARY_CREATE,
-
-        getUsers,
-
         getAllGuests,
         getGuestById,
         createGuest,
         updateGuest,
         removeGuest,
-    }
+    };
 }

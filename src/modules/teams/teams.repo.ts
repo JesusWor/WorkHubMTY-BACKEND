@@ -4,7 +4,7 @@ import { User } from "../user/user.schema.js";
 import { Team, TeamMember, TeamMembers } from "./teams.schema.js";
 
 export type TeamsRepo = {
-    getAllTeams: () => Promise<Team[]>;
+    getAllTeams: (name?: string) => Promise<Team[]>;
     getMyTeams: (userId: string) => Promise<Team[]>;
     getTeamMembers: (teamId: string) => Promise<TeamMember[]>;
     getTeamById: (teamId: number) => Promise<TeamMembers | null>;
@@ -20,18 +20,42 @@ function uniqueIds(ids: string[]): string[] {
 }
 
 export function makeTeamsRepo(db: Db): TeamsRepo {
-    const getAllTeams = async (): Promise<Team[]> => {
+    const getAllTeams = async (name?: string): Promise<Team[]> => {
+        const trimmedName = name?.trim();
+
+        if (!trimmedName) {
+            const { rows } = await db.query(`
+                SELECT
+                    wg.id,
+                    wg.name,
+                    wg.description,
+                    COUNT(wgm.userId) AS memberCount
+                FROM work_groups wg
+                LEFT JOIN work_group_members wgm ON wg.id = wgm.workGroupId
+                GROUP BY wg.id, wg.name, wg.description
+                ORDER BY wg.id DESC;
+            `);
+            return rows as Team[];
+        }
+
         const { rows } = await db.query(`
             SELECT
                 wg.id,
                 wg.name,
                 wg.description,
-                COUNT(wgm.userId) AS memberCount
+                COUNT(wgm.userId) AS memberCount,
+                CASE
+                    WHEN LOWER(wg.name) = LOWER(?) THEN 3
+                    WHEN LOWER(wg.name) LIKE CONCAT(LOWER(?), '%') THEN 2
+                    WHEN LOWER(wg.name) LIKE CONCAT('%', LOWER(?), '%') THEN 1
+                    ELSE 0
+                END AS relevance
             FROM work_groups wg
             LEFT JOIN work_group_members wgm ON wg.id = wgm.workGroupId
+            WHERE LOWER(wg.name) LIKE CONCAT('%', LOWER(?), '%')
             GROUP BY wg.id, wg.name, wg.description
-            ORDER BY wg.id DESC;
-        `);
+            ORDER BY relevance DESC, LENGTH(wg.name) ASC, wg.id DESC;
+        `, [trimmedName, trimmedName, trimmedName, trimmedName]);
         return rows as Team[];
     };
 
