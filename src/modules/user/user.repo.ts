@@ -16,6 +16,7 @@ export type UserRepo = {
 
     // Cristian. Adding getUsers that filters from a query 
     getUsers: (query?:string, excludeId?:string) => Promise<User[]>;
+    getPotentialFriends: (query?:string, userId?:string) => Promise<User[]>;
 
     getAllByName: (name: string) => Promise<User[]>;
     TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => Promise<User>;
@@ -98,6 +99,80 @@ export function makeUserRepo(db: Db): UserRepo {
 
          return rows;
     }
+
+    const getPotentialFriends = async (query?: string, userId?: string): Promise<User[]> => {
+        const params: unknown[] = [];
+        let where = "";
+
+        if (query?.trim()) {
+        where = `
+            AND (
+            u.name LIKE ?
+            OR u.email LIKE ?
+            )
+        `;
+
+        params.push(`%${query.trim()}%`, `%${query.trim()}%`);
+        }
+
+        const { rows } = await db.query(
+        `
+        SELECT
+            u.e_id AS eId,
+            u.name,
+            u.email,
+            u.role_name AS roleName,
+            CASE
+            WHEN fr.from_user = ? AND fr.to_user = u.e_id THEN 'pending_sent'
+            WHEN fr.from_user = u.e_id AND fr.to_user = ? THEN 'pending_received'
+            ELSE NULL
+            END AS friendshipStatus
+        FROM public_users_view u
+        LEFT JOIN friend_requests fr
+            ON (
+            (
+                fr.from_user = ?
+                AND fr.to_user = u.e_id
+            )
+            OR
+            (
+                fr.from_user = u.e_id
+                AND fr.to_user = ?
+            )
+            )
+            AND fr.status = 'pending'
+        WHERE u.e_id <> ?
+            AND NOT EXISTS (
+            SELECT 1
+            FROM friendships f
+            WHERE
+                (
+                f.user_low = ?
+                AND f.user_high = u.e_id
+                )
+                OR
+                (
+                f.user_high = ?
+                AND f.user_low = u.e_id
+                )
+            )
+            ${where}
+        LIMIT 100
+        `,
+        [
+            userId, // CASE pending_sent
+            userId, // CASE pending_received
+            userId, // LEFT JOIN sent
+            userId, // LEFT JOIN received
+            userId, // exclude self
+            userId, // friendships low
+            userId, // friendships high
+            ...params,
+        ],
+        );
+
+        return rows;
+    };
 
     const getAllByName = async (query: string): Promise<User[]> => {
         const trimmed = query.trim();
@@ -248,6 +323,7 @@ export function makeUserRepo(db: Db): UserRepo {
         TEMPORARY_CREATE,
 
         getUsers,
+        getPotentialFriends,
 
         getAllGuests,
         getGuestById,

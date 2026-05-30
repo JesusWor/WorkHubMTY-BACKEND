@@ -13,7 +13,7 @@ export function makeUserRouter(controller: UserController): Router {
     router.post("/guests", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.createGuest));
     router.patch("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.updateGuest));
     router.delete("/guests/:guestId", authenticate, authorize(ADMIN_ONLY_POLICY), asyncHandler(controller.removeGuest));
-
+    router.get("/me/potential-friends", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getPotentialFriends));
     router.get("/me/friendships", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyFriendships));
     router.get("/profile/me", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyFullProfile));
     router.get("/profile/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getUserFullProfile));

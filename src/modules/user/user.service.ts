@@ -14,6 +14,7 @@ export type UserService = {
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
     getUsers: (query?: string, excludeId?: string) => Promise<User[]>;
+    getPotentialFriends: (userId: string, query?: string) => Promise<User[]>;
 
     getUserFriends: (userId: string) => Promise<User[]>;
     getAllByName: (name: string) => Promise<User[]>;
@@ -110,6 +111,11 @@ export function makeUserService(
         return enrichWithStatus(users, userStatusService);
     };
 
+    const getPotentialFriends = async (userId: string, query?: string): Promise<User[]> => {
+        const users = await repo.getPotentialFriends(query, userId);
+        return enrichWithStatus(users, userStatusService);
+    }
+
     const getAllGuests = async (): Promise<Guest[]> => repo.getAllGuests();
 
     const getGuestById = async (guestId: number): Promise<Guest> => {
@@ -157,6 +163,7 @@ export function makeUserService(
         getAllByName,
         getFullProfile,
         getUsers,
+        getPotentialFriends,
         getAllGuests,
         getGuestById,
         createGuest,
