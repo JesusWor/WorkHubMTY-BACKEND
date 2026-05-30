@@ -1,12 +1,11 @@
+import bcrypt from "bcrypt";
 import type { RoleRepo } from "../role/role.repo.js";
 import type { UserRepo } from "./user.repo.js";
-import type { User, Profile, Guest, WorkGroup, WorkGroupMembers, UpdateGroup } from "./user.schema.js";
+import type { User, Profile, Guest } from "./user.schema.js";
 import type { FriendshipService } from "../friendship/friendship.service.js";
 import type { AchievementsService } from "../achievements/achievements.service.js";
 import type { UserStatusService } from "./user-status.service.js";
-import bcrypt from "bcrypt";
-import { BadRequestError, ForbiddenError, InternalError, NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
-import { Roles } from "../../shared/types/role.type.js";
+import { ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;
@@ -14,22 +13,12 @@ export type UserService = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
-    // Cristian. Adding getUsers that filters from a query 
-    getUsers: (query?:string, excludeId?:string) => Promise<User[]>;
+    getUsers: (query?: string, excludeId?: string) => Promise<User[]>;
 
     getUserFriends: (userId: string) => Promise<User[]>;
     getAllByName: (name: string) => Promise<User[]>;
     getFullProfile: (requestedEId: string, authEId: string) => Promise<Profile>;
 
-    // Groups
-    getAllGroups: () => Promise<WorkGroup[]>;
-    getMyGroups: (authEId: string) => Promise<WorkGroup[]>;
-    getGroupById: (groupId: number) => Promise<WorkGroupMembers>;
-    createGroup: (name: string, description: string, memberEIds: string[]) => Promise<WorkGroupMembers>;
-    updateGroup: (groupId: number, authEId: string, authRole: Roles, patch: UpdateGroup) => Promise<WorkGroupMembers>;
-    removeGroup: (groupId: number, authEId: string, authRole: Roles) => Promise<boolean>;
-
-    // Guests
     getAllGuests: () => Promise<Guest[]>;
     getGuestById: (guestId: number) => Promise<Guest>;
     createGuest: (name: string, email: string, invitedByEId: string) => Promise<Guest>;
@@ -37,12 +26,12 @@ export type UserService = {
     removeGuest: (guestId: number) => Promise<boolean>;
 
     TEMPORARY_CREATE?: (eId: string, name: string, email: string, password: string, role: string) => Promise<User>;
-}
+};
 
-async function enrichWithStatus(users: User[], statusService: UserStatusService): Promise<User[]> {
+export async function enrichWithStatus(users: User[], statusService: UserStatusService): Promise<User[]> {
     if (!users.length) return users;
-    const statuses = await statusService.getStatuses(users.map(u => u.eId));
-    return users.map(u => ({ ...u, status: statuses.get(u.eId) ?? "offline" }));
+    const statuses = await statusService.getStatuses(users.map((user) => user.eId));
+    return users.map((user) => ({ ...user, status: statuses.get(user.eId) ?? "offline" }));
 }
 
 async function enrichOneWithStatus(user: User | null, statusService: UserStatusService): Promise<User | null> {
@@ -58,9 +47,6 @@ export function makeUserService(
     achievementService: AchievementsService,
     userStatusService: UserStatusService,
 ): UserService {
-
-    // Users
-
     const getAll = async (): Promise<User[]> => {
         const users = await repo.getAll();
         return enrichWithStatus(users, userStatusService);
@@ -98,13 +84,11 @@ export function makeUserService(
         }
 
         const isAllowed = await friendshipService.areFriends(requestedEId, authEId);
-
         if (!isAllowed && requestedEId !== authEId) {
-            throw new ForbiddenError("Solo puedes ver este perfil si eres amigo o eres tú");
+            throw new ForbiddenError("Solo puedes ver este perfil si eres amigo o eres tu");
         }
 
         const user = await repo.getById(requestedEId);
-
         if (!user) {
             throw new NotFoundError("Usuario no encontrado");
         }
@@ -121,107 +105,10 @@ export function makeUserService(
         };
     };
 
-    // Groups
-
-    const assertGroupAccess = async (groupId: number, authEId: string, authRole: Roles): Promise<WorkGroupMembers> => {
-        const group = await repo.getGroupById(groupId);
-        if (!group) throw new NotFoundError("Grupo no encontrado");
-
-        const isAdmin = authRole === Roles.ADMIN;
-        const isMember = group.users.some(u => u.eId === authEId);
-
-        if (!isAdmin && !isMember) {
-            throw new ForbiddenError("Solo miembros del grupo o administradores pueden realizar esta acción");
-        }
-
-        return group;
-    };
-
-    const enrichGroupMembers = async (group: WorkGroupMembers): Promise<WorkGroupMembers> => {
-        const enrichedUsers = await enrichWithStatus(group.users, userStatusService);
-        return { ...group, users: enrichedUsers };
-    };
-
-    const getAllGroups = async (): Promise<WorkGroup[]> => repo.getAllGroups();
-
-    const getMyGroups = async (authEId: string): Promise<WorkGroup[]> => {
-        if (!authEId) {
-            throw new BadRequestError("User id is required");
-        }
-
-        return repo.getMyGroups(authEId);
-    };
-
-    const getGroupById = async (groupId: number): Promise<WorkGroupMembers> => {
-        const group = await repo.getGroupById(groupId);
-        if (!group) throw new NotFoundError("Grupo no encontrado");
-        return enrichGroupMembers(group);
-    };
-
-    const createGroup = async (name: string, description: string, memberEIds: string[]): Promise<WorkGroupMembers> => {
-        const group = await repo.createGroup(name, description, memberEIds);
-        return enrichGroupMembers(group);
-    };
-
-    const updateGroup = async (
-        groupId: number,
-        authEId: string,
-        authRole: Roles,
-        patch: UpdateGroup
-    ): Promise<WorkGroupMembers> => {
-        const currentGroup = await assertGroupAccess(groupId, authEId, authRole);
-        const currentMemberIds = new Set(currentGroup.users.map((user) => user.eId));
-
-        const nextName = patch.name !== undefined && patch.name !== currentGroup.name ? patch.name : undefined;
-        const nextDescription = patch.description !== undefined && patch.description !== currentGroup.description ? patch.description : undefined;
-
-        const addMemberEIds = patch.addMemberEIds
-            ? [...new Set(patch.addMemberEIds)].filter((memberEId) => !currentMemberIds.has(memberEId))
-            : [];
-
-        const removeMemberEIds = patch.removeMemberEIds
-            ? [...new Set(patch.removeMemberEIds)].filter((memberEId) => currentMemberIds.has(memberEId))
-            : [];
-
-        if (
-            nextName === undefined &&
-            nextDescription === undefined &&
-            addMemberEIds.length === 0 &&
-            removeMemberEIds.length === 0
-        ) {
-            throw new UnprocessableError("No fields to update");
-        }
-
-        let updatedGroup = currentGroup;
-
-        if (nextName !== undefined || nextDescription !== undefined) {
-            const renamed = await repo.updateGroup(groupId, nextName, nextDescription);
-            if (!renamed) throw new NotFoundError("Grupo no encontrado");
-            updatedGroup = renamed;
-        }
-
-        if (addMemberEIds.length > 0) {
-            updatedGroup = await repo.addGroupMembers(groupId, addMemberEIds);
-        }
-
-        if (removeMemberEIds.length > 0) {
-            updatedGroup = await repo.removeGroupMembers(groupId, removeMemberEIds);
-        }
-
-        return enrichGroupMembers(updatedGroup);
-    };
-
-    const removeGroup = async (groupId: number, authEId: string, authRole: Roles): Promise<boolean> => {
-        await assertGroupAccess(groupId, authEId, authRole);
-        return repo.removeGroup(groupId);
-    };
-
-    const getUsers = async (query?:string, excludeId?:string): Promise<User[]> => {
+    const getUsers = async (query?: string, excludeId?: string): Promise<User[]> => {
         const users = await repo.getUsers(query, excludeId);
         return enrichWithStatus(users, userStatusService);
-     }
-
-    // Guests
+    };
 
     const getAllGuests = async (): Promise<Guest[]> => repo.getAllGuests();
 
@@ -244,8 +131,6 @@ export function makeUserService(
     const removeGuest = async (guestId: number): Promise<boolean> => {
         return repo.removeGuest(guestId);
     };
-
-    // Temp
 
     const TEMPORARY_CREATE = async (eId: string, name: string, email: string, password: string, role: string): Promise<User> => {
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -271,19 +156,12 @@ export function makeUserService(
         getUserFriends,
         getAllByName,
         getFullProfile,
-        getAllGroups,
-        getMyGroups,
-        getGroupById,
-        createGroup,
-        updateGroup,
-        removeGroup,
+        getUsers,
         getAllGuests,
         getGuestById,
         createGuest,
         updateGuest,
         removeGuest,
         TEMPORARY_CREATE,
-
-        getUsers
     };
 }

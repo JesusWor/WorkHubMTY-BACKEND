@@ -17,13 +17,11 @@ export const CreateUserSchema = UserSchema.extend({
 export type User = z.infer<typeof UserSchema>;
 export type CreateUser = z.infer<typeof CreateUserSchema>;
 
-// export const UpdateUserSchema = UserSchema.partial().pick({ name: true, email: true, roleName: true });
-// export type UpdateUser = z.infer<typeof UpdateUserSchema>;
-
 export const ProfileSchema = UserSchema.extend({
     friendCount: z.number(),
     achievementCount: z.number(),
-})
+});
+
 export type Profile = z.infer<typeof ProfileSchema>;
 
 export const GuestSchema = z.object({
@@ -50,74 +48,3 @@ export const UpdateGuestSchema = z.object({
 });
 
 export type UpdateGuest = z.infer<typeof UpdateGuestSchema>;
-
-
-
-export const WorkGroupSchema = z.object({
-    id: z.number(),
-    name: z.string(),
-    description: z.string().nullable(),
-    memberCount: z.number().int().nonnegative().optional(),
-});
-
-export type WorkGroup = z.infer<typeof WorkGroupSchema>;
-
-export const WorkGroupMembersSchema = WorkGroupSchema.extend({
-    users: z.array(UserSchema),
-});
-
-export type WorkGroupMembers = z.infer<typeof WorkGroupMembersSchema>;
-
-export const CreateGroupSchema = z.object({
-    name: z.string().min(1),
-    description: z.string().optional().default(""),
-    memberEIds: z.array(z.string().min(1)).min(1),
-});
-
-export type CreateGroup = z.infer<typeof CreateGroupSchema>;
-
-const UniqueMemberIdsSchema = z.array(z.string().min(1)).min(1).refine(
-    (memberEIds) => new Set(memberEIds).size === memberEIds.length,
-    {
-        message: "Member ids must be unique",
-    }
-);
-
-export const UpdateGroupSchema = z.object({
-    name: z.string().min(1).optional(),
-    description: z.string().optional(),
-    addMemberEIds: UniqueMemberIdsSchema.optional(),
-    removeMemberEIds: UniqueMemberIdsSchema.optional(),
-}).superRefine((data, ctx) => {
-    const hasName = data.name !== undefined;
-    const hasDescription = data.description !== undefined;
-    const hasAddMembers = data.addMemberEIds !== undefined;
-    const hasRemoveMembers = data.removeMemberEIds !== undefined;
-
-    if (!hasName && !hasDescription && !hasAddMembers && !hasRemoveMembers) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "At least one field must be provided",
-            path: [],
-        });
-        return;
-    }
-
-    if (data.addMemberEIds && data.removeMemberEIds) {
-        const overlap = data.addMemberEIds.filter((memberEId) => data.removeMemberEIds?.includes(memberEId));
-        if (overlap.length > 0) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Member ids cannot be added and removed in the same request",
-                path: ["addMemberEIds"],
-            });
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Member ids cannot be added and removed in the same request",
-                path: ["removeMemberEIds"],
-            });
-        }
-    }
-});
-
-export type UpdateGroup = z.infer<typeof UpdateGroupSchema>;

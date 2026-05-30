@@ -1,17 +1,8 @@
 import { Db } from "../../infra/db/db.js";
-import { User, Guest, WorkGroup, WorkGroupMembers } from "./user.schema.js";
+import { User, Guest } from "./user.schema.js";
 import { NotFoundError, ConflictError, UnprocessableError } from "../../shared/errors/AppError.js";
 
 export type UserRepo = {
-    getAllGroups: () => Promise<WorkGroup[]>;
-    getMyGroups: (userId: string) => Promise<WorkGroup[]>;
-    getGroupById: (groupId: number) => Promise<WorkGroupMembers | null>;
-    createGroup: (name: string, description: string, userIds: string[]) => Promise<WorkGroupMembers>;
-    updateGroup: (groupId: number, name?: string, description?: string) => Promise<WorkGroupMembers | null>;
-    removeGroup: (groupId: number) => Promise<boolean>;
-    addGroupMembers: (groupId: number, memberEIds: string[]) => Promise<WorkGroupMembers>;
-    removeGroupMembers: (groupId: number, memberEIds: string[]) => Promise<WorkGroupMembers>;
-
     getAllGuests: () => Promise<Guest[]>;
     getGuestById: (guestId: number) => Promise<Guest | null>;
     createGuest: (name: string, email: string, invitedByEId: string) => Promise<Guest>;
@@ -248,157 +239,6 @@ export function makeUserRepo(db: Db): UserRepo {
         return affectedCount > 0;
     };
 
-    // Groups
-    const getAllGroups = async (): Promise<WorkGroup[]> => {
-        const { rows } = await db.query(`
-            SELECT
-                wg.id,
-                wg.name,
-                wg.description,
-                COUNT(wgm.user_id) AS memberCount
-            FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id
-            GROUP BY wg.id;
-        `);
-        return rows as WorkGroup[];
-    };
-
-    const getMyGroups = async (userId: string): Promise<WorkGroup[]> => {
-        const { rows } = await db.query(`
-            SELECT
-                wg.id,
-                wg.name,
-                wg.description,
-                COUNT(wgm_all.user_id) AS memberCount
-            FROM work_groups wg
-            INNER JOIN work_group_members wgm_me
-                ON wg.id = wgm_me.work_group_id
-            LEFT JOIN work_group_members wgm_all
-                ON wg.id = wgm_all.work_group_id
-            WHERE wgm_me.user_id = ?
-            GROUP BY wg.id, wg.name, wg.description
-            ORDER BY wg.id DESC;
-        `, [userId]);
-
-        return rows as WorkGroup[];
-    };
-
-    const getGroupById = async (groupId: number): Promise<WorkGroupMembers | null> => {
-        const { rows } = await db.query(`
-            SELECT
-                wg.id AS groupId,
-                wg.name AS groupName,
-                wg.description AS groupDescription,
-                u.e_id AS userId,
-                u.name AS userName,
-                u.email AS userEmail,
-                u.role_name AS userRole
-            FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id
-            LEFT JOIN public_users_view u ON wgm.user_id = u.e_id
-            WHERE wg.id = ?;
-        `, [groupId]);
-
-        return rows.length > 0 ? {
-            id: rows[0].groupId,
-            name: rows[0].groupName,
-            description: rows[0].groupDescription,
-            users: rows.map(row => row.userId ? {
-                eId: row.userId,
-                name: row.userName,
-                email: row.userEmail,
-                roleName: row.userRole
-            } as User : null).filter(user => user !== null) as User[]
-        } : null;
-    };
-
-    const createGroup = async (name: string, description: string, userIds: string[]): Promise<WorkGroupMembers> => {
-        const { affectedCount, insertId } = await db.execute(`
-            INSERT INTO work_groups (name, description, create_time)
-            VALUES (?, ?, ?);
-        `, [name, description, new Date()]);
-
-        if (!affectedCount || !insertId) {
-            throw new ConflictError('El grupo ya existe o no se pudo crear');
-        }
-
-        const values = userIds.map(() => "(?, ?)").join(", ");
-
-        const params = userIds.flatMap(userId => [insertId, userId]);
-
-        await db.execute(`
-            INSERT INTO work_group_members (work_group_id, user_id)
-            VALUES ${values};
-        `, params);
-
-        return getGroupById(insertId) as Promise<WorkGroupMembers>;
-    };
-
-    const updateGroup = async (groupId: number, name?: string, description?: string): Promise<WorkGroupMembers | null> => {
-        const fieldsToUpdate: string[] = [];
-        const params: any[] = [];
-
-        if (name) {
-            fieldsToUpdate.push("name = ?");
-            params.push(name);
-        }
-        if (description) {
-            fieldsToUpdate.push("description = ?");
-            params.push(description);
-        }
-        if (fieldsToUpdate.length === 0) {
-            throw new UnprocessableError("No fields to update");
-        }
-
-        params.push(groupId);
-        const setClause = fieldsToUpdate.join(", ");
-
-        const { affectedCount } = await db.execute(`
-            UPDATE work_groups
-            SET ${setClause}
-            WHERE id = ?;
-        `, params);
-
-        if (!affectedCount) {
-            throw new NotFoundError('Grupo no encontrado');
-        }
-
-        return getGroupById(groupId) as Promise<WorkGroupMembers>;
-    };
-
-    const removeGroup = async (groupId: number): Promise<boolean> => {
-        const { affectedCount } = await db.execute(`
-            DELETE FROM work_groups
-            WHERE id = ?;
-        `, [groupId]);
-
-        return affectedCount > 0;
-    };
-
-    const addGroupMembers = async (groupId: number, memberEIds: string[]): Promise<WorkGroupMembers> => {
-        const values = memberEIds.map(() => "(?, ?)").join(", ");
-        const params = memberEIds.flatMap(userId => [groupId, userId]);
-
-        await db.execute(`
-            INSERT INTO work_group_members (work_group_id, user_id)
-            VALUES ${values};
-        `, params);
-
-        return getGroupById(groupId) as Promise<WorkGroupMembers>;
-    };
-
-    const removeGroupMembers = async (groupId: number, memberEIds: string[]): Promise<WorkGroupMembers> => {
-        const placeholders = memberEIds.map(() => "?").join(", ");
-        const params = [groupId, ...memberEIds];
-        await db.execute(`
-            DELETE FROM work_group_members
-            WHERE work_group_id = ?
-            AND user_id IN (${placeholders});
-        `, params);
-
-        return getGroupById(groupId) as Promise<WorkGroupMembers>;
-    };
-
     return {
         getAll,
         getById,
@@ -414,14 +254,5 @@ export function makeUserRepo(db: Db): UserRepo {
         createGuest,
         updateGuest,
         removeGuest,
-
-        getAllGroups,
-        getMyGroups,
-        getGroupById,
-        createGroup,
-        updateGroup,
-        removeGroup,
-        addGroupMembers,
-        removeGroupMembers
     }
 }

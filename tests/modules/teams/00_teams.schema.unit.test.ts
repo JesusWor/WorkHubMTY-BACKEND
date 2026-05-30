@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { UpdateGroupSchema } from '../../../src/modules/user/user.schema';
+import { UpdateTeamSchema } from '../../../src/modules/teams/teams.schema';
 
-describe('UpdateGroupSchema', () => {
-    it('acepta solo metadata del grupo', () => {
-        const result = UpdateGroupSchema.safeParse({
+describe('UpdateTeamSchema', () => {
+    it('acepta solo metadata del team', () => {
+        const result = UpdateTeamSchema.safeParse({
             name: 'Nuevo nombre',
             description: 'Nueva descripcion',
         });
@@ -12,7 +12,7 @@ describe('UpdateGroupSchema', () => {
     });
 
     it('acepta solo altas de miembros', () => {
-        const result = UpdateGroupSchema.safeParse({
+        const result = UpdateTeamSchema.safeParse({
             addMemberEIds: ['USR00001', 'USR00002'],
         });
 
@@ -20,7 +20,7 @@ describe('UpdateGroupSchema', () => {
     });
 
     it('acepta solo bajas de miembros', () => {
-        const result = UpdateGroupSchema.safeParse({
+        const result = UpdateTeamSchema.safeParse({
             removeMemberEIds: ['USR00003'],
         });
 
@@ -28,14 +28,14 @@ describe('UpdateGroupSchema', () => {
     });
 
     it('rechaza body vacio', () => {
-        const result = UpdateGroupSchema.safeParse({});
+        const result = UpdateTeamSchema.safeParse({});
 
         expect(result.success).toBe(false);
         expect(result.error?.issues[0].message).toBe('At least one field must be provided');
     });
 
     it('rechaza listas vacias cuando vienen presentes', () => {
-        const result = UpdateGroupSchema.safeParse({
+        const result = UpdateTeamSchema.safeParse({
             addMemberEIds: [],
         });
 
@@ -43,7 +43,7 @@ describe('UpdateGroupSchema', () => {
     });
 
     it('rechaza ids duplicados dentro de la misma lista', () => {
-        const result = UpdateGroupSchema.safeParse({
+        const result = UpdateTeamSchema.safeParse({
             addMemberEIds: ['USR00001', 'USR00001'],
         });
 
@@ -52,7 +52,7 @@ describe('UpdateGroupSchema', () => {
     });
 
     it('rechaza ids repetidos entre add y remove', () => {
-        const result = UpdateGroupSchema.safeParse({
+        const result = UpdateTeamSchema.safeParse({
             addMemberEIds: ['USR00001'],
             removeMemberEIds: ['USR00001'],
         });

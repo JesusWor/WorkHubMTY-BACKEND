@@ -1,8 +1,8 @@
-import { UserService } from "./user.service.js";
 import { Request, Response } from "express";
-import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
-import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema, CreateGroupSchema, UpdateGroupSchema } from "./user.schema.js";
+import { UserService } from "./user.service.js";
+import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema } from "./user.schema.js";
+import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { mapRole } from "../../middleware/index.js";
 
 export type UserController = {
@@ -18,14 +18,6 @@ export type UserController = {
     getMyFullProfile: (req: Request, res: Response) => Promise<void>;
     getUserFullProfile: (req: Request, res: Response) => Promise<void>;
 
-    // Groups
-    getAllGroups: (req: Request, res: Response) => Promise<void>;
-    getMyGroups: (req: Request, res: Response) => Promise<void>;
-    getGroupById: (req: Request, res: Response) => Promise<void>;
-    createGroup: (req: Request, res: Response) => Promise<void>;
-    updateGroup: (req: Request, res: Response) => Promise<void>;
-    removeGroup: (req: Request, res: Response) => Promise<void>;
-
     // Guests
     getAllGuests: (req: Request, res: Response) => Promise<void>;
     getGuestById: (req: Request, res: Response) => Promise<void>;
@@ -34,12 +26,9 @@ export type UserController = {
     removeGuest: (req: Request, res: Response) => Promise<void>;
 
     TEMPORARY_CREATE?: (req: Request, res: Response) => Promise<void>;
-}
+};
 
 export function makeUserController(service: UserService): UserController {
-
-    // Helpers
-
     const requireAuth = (req: Request, res: Response) => {
         const authEId = req.user?.eId;
         const authRoleRaw = req.user?.role;
@@ -50,15 +39,6 @@ export function makeUserController(service: UserService): UserController {
         return { authEId, authRole: mapRole(authRoleRaw) };
     };
 
-    const parseGroupId = (req: Request, res: Response): number | null => {
-        const parsed = z.coerce.number().int().positive().safeParse(req.params.groupId);
-        if (!parsed.success) {
-            GlobalResponse.badRequest(res, "groupId must be a positive integer");
-            return null;
-        }
-        return parsed.data;
-    };
-
     const parseGuestId = (req: Request, res: Response): number | null => {
         const parsed = z.coerce.number().int().positive().safeParse(req.params.guestId);
         if (!parsed.success) {
@@ -67,8 +47,6 @@ export function makeUserController(service: UserService): UserController {
         }
         return parsed.data;
     };
-
-    // Users
 
     const getAll = async (_req: Request, res: Response): Promise<void> => {
         const users = await service.getAll();
@@ -138,70 +116,7 @@ export function makeUserController(service: UserService): UserController {
         const excludeId = req.query.excludeId ? z.string().parse(req.query.excludeId) : undefined;
         const users = await service.getUsers(query, excludeId);
         GlobalResponse.okWithData(res, users);
-    }
-
-    // Groups
-
-    const getAllGroups = async (_req: Request, res: Response): Promise<void> => {
-        const groups = await service.getAllGroups();
-        GlobalResponse.okWithData(res, groups);
     };
-
-    const getMyGroups = async (req: Request, res: Response): Promise<void> => {
-        const auth = requireAuth(req, res);
-        if (!auth) return;
-
-        const groups = await service.getMyGroups(auth.authEId);
-        GlobalResponse.okWithData(res, groups);
-    };
-
-    const getGroupById = async (req: Request, res: Response): Promise<void> => {
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-        const group = await service.getGroupById(groupId);
-        GlobalResponse.okWithData(res, group);
-    };
-
-    const createGroup = async (req: Request, res: Response): Promise<void> => {
-        const parsed = CreateGroupSchema.safeParse(req.body);
-        if (!parsed.success) {
-            GlobalResponse.zodError(res, parsed.error);
-            return;
-        }
-        const { name, description, memberEIds } = parsed.data;
-        const group = await service.createGroup(name, description, memberEIds);
-        GlobalResponse.okWithData(res, group);
-    };
-
-    const updateGroup = async (req: Request, res: Response): Promise<void> => {
-        const auth = requireAuth(req, res);
-        if (!auth) return;
-
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-
-        const parsed = UpdateGroupSchema.safeParse(req.body);
-        if (!parsed.success) {
-            GlobalResponse.zodError(res, parsed.error);
-            return;
-        }
-
-        const updated = await service.updateGroup(groupId, auth.authEId, auth.authRole, parsed.data);
-        GlobalResponse.okWithData(res, updated);
-    };
-
-    const removeGroup = async (req: Request, res: Response): Promise<void> => {
-        const auth = requireAuth(req, res);
-        if (!auth) return;
-
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-
-        await service.removeGroup(groupId, auth.authEId, auth.authRole);
-        GlobalResponse.ok(res);
-    };
-
-    // Guests
 
     const getAllGuests = async (_req: Request, res: Response): Promise<void> => {
         const guests = await service.getAllGuests();
@@ -250,8 +165,6 @@ export function makeUserController(service: UserService): UserController {
         GlobalResponse.ok(res);
     };
 
-    // Temp
-
     const TEMPORARY_CREATE = async (req: Request, res: Response): Promise<void> => {
         if (!service.TEMPORARY_CREATE) return;
 
@@ -279,13 +192,7 @@ export function makeUserController(service: UserService): UserController {
         getAllByName,
         getMyFullProfile,
         getUserFullProfile,
-        getAllGroups,
-        getMyGroups,
         getUsers,
-        getGroupById,
-        createGroup,
-        updateGroup,
-        removeGroup,
         getAllGuests,
         getGuestById,
         createGuest,
