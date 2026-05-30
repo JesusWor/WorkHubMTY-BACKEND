@@ -15,8 +15,6 @@ export function makeUserRouter(controller: UserController): Router {
     router.patch("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.updateGroup));
     router.delete("/groups/:groupId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.removeGroup));
     router.get("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getGroupById));
-    router.patch("/groups/:groupId/members", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.addGroupMembers));
-    router.delete("/groups/:groupId/members",   authenticate, authorize(NOT_GUEST_POLICY),  asyncHandler(controller.removeGroupMembers));
     
     // router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAll));
     router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getUsers));

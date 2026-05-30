@@ -76,17 +76,48 @@ export const CreateGroupSchema = z.object({
 
 export type CreateGroup = z.infer<typeof CreateGroupSchema>;
 
+const UniqueMemberIdsSchema = z.array(z.string().min(1)).min(1).refine(
+    (memberEIds) => new Set(memberEIds).size === memberEIds.length,
+    {
+        message: "Member ids must be unique",
+    }
+);
+
 export const UpdateGroupSchema = z.object({
     name: z.string().min(1).optional(),
     description: z.string().optional(),
-}).refine(data => data.name !== undefined || data.description !== undefined, {
-    message: "At least one field must be provided"
+    addMemberEIds: UniqueMemberIdsSchema.optional(),
+    removeMemberEIds: UniqueMemberIdsSchema.optional(),
+}).superRefine((data, ctx) => {
+    const hasName = data.name !== undefined;
+    const hasDescription = data.description !== undefined;
+    const hasAddMembers = data.addMemberEIds !== undefined;
+    const hasRemoveMembers = data.removeMemberEIds !== undefined;
+
+    if (!hasName && !hasDescription && !hasAddMembers && !hasRemoveMembers) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "At least one field must be provided",
+            path: [],
+        });
+        return;
+    }
+
+    if (data.addMemberEIds && data.removeMemberEIds) {
+        const overlap = data.addMemberEIds.filter((memberEId) => data.removeMemberEIds?.includes(memberEId));
+        if (overlap.length > 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Member ids cannot be added and removed in the same request",
+                path: ["addMemberEIds"],
+            });
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Member ids cannot be added and removed in the same request",
+                path: ["removeMemberEIds"],
+            });
+        }
+    }
 });
 
 export type UpdateGroup = z.infer<typeof UpdateGroupSchema>;
-
-export const GroupMembersBodySchema = z.object({
-    memberEIds: z.array(z.string().min(1)).min(1),
-});
-
-export type GroupMembersBody = z.infer<typeof GroupMembersBodySchema>;

@@ -2,7 +2,7 @@ import { UserService } from "./user.service.js";
 import { Request, Response } from "express";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
-import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema, CreateGroupSchema, UpdateGroupSchema, GroupMembersBodySchema } from "./user.schema.js";
+import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema, CreateGroupSchema, UpdateGroupSchema } from "./user.schema.js";
 import { mapRole } from "../../middleware/index.js";
 
 export type UserController = {
@@ -25,8 +25,6 @@ export type UserController = {
     createGroup: (req: Request, res: Response) => Promise<void>;
     updateGroup: (req: Request, res: Response) => Promise<void>;
     removeGroup: (req: Request, res: Response) => Promise<void>;
-    addGroupMembers: (req: Request, res: Response) => Promise<void>;
-    removeGroupMembers: (req: Request, res: Response) => Promise<void>;
 
     // Guests
     getAllGuests: (req: Request, res: Response) => Promise<void>;
@@ -188,7 +186,7 @@ export function makeUserController(service: UserService): UserController {
             return;
         }
 
-        const updated = await service.updateGroup(groupId, auth.authEId, auth.authRole, parsed.data.name, parsed.data.description);
+        const updated = await service.updateGroup(groupId, auth.authEId, auth.authRole, parsed.data);
         GlobalResponse.okWithData(res, updated);
     };
 
@@ -201,40 +199,6 @@ export function makeUserController(service: UserService): UserController {
 
         await service.removeGroup(groupId, auth.authEId, auth.authRole);
         GlobalResponse.ok(res);
-    };
-
-    const addGroupMembers = async (req: Request, res: Response): Promise<void> => {
-        const auth = requireAuth(req, res);
-        if (!auth) return;
-
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-
-        const parsed = GroupMembersBodySchema.safeParse(req.body);
-        if (!parsed.success) {
-            GlobalResponse.zodError(res, parsed.error);
-            return;
-        }
-
-        const updated = await service.addGroupMembers(groupId, auth.authEId, auth.authRole, parsed.data.memberEIds);
-        GlobalResponse.okWithData(res, updated);
-    };
-
-    const removeGroupMembers = async (req: Request, res: Response): Promise<void> => {
-        const auth = requireAuth(req, res);
-        if (!auth) return;
-
-        const groupId = parseGroupId(req, res);
-        if (groupId === null) return;
-
-        const parsed = GroupMembersBodySchema.safeParse(req.body);
-        if (!parsed.success) {
-            GlobalResponse.zodError(res, parsed.error);
-            return;
-        }
-
-        const updated = await service.removeGroupMembers(groupId, auth.authEId, auth.authRole, parsed.data.memberEIds);
-        GlobalResponse.okWithData(res, updated);
     };
 
     // Guests
@@ -322,8 +286,6 @@ export function makeUserController(service: UserService): UserController {
         createGroup,
         updateGroup,
         removeGroup,
-        addGroupMembers,
-        removeGroupMembers,
         getAllGuests,
         getGuestById,
         createGuest,

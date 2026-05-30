@@ -1,12 +1,12 @@
-import { RoleRepo } from "../role/role.repo.js";
-import { UserRepo } from "./user.repo.js";
-import { User, Profile, Guest, WorkGroup, WorkGroupMembers } from "./user.schema.js";
-import { FriendshipService } from "../friendship/friendship.service.js";
-import { AchievementsService } from "../achievements/achievements.service.js";
-import { UserStatusService } from "./user-status.service.js";
+import type { RoleRepo } from "../role/role.repo.js";
+import type { UserRepo } from "./user.repo.js";
+import type { User, Profile, Guest, WorkGroup, WorkGroupMembers, UpdateGroup } from "./user.schema.js";
+import type { FriendshipService } from "../friendship/friendship.service.js";
+import type { AchievementsService } from "../achievements/achievements.service.js";
+import type { UserStatusService } from "./user-status.service.js";
 import bcrypt from "bcrypt";
-import { BadRequestError, ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
-import { Roles } from "../../middleware/index.js";
+import { BadRequestError, ForbiddenError, InternalError, NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
+import { Roles } from "../../shared/types/role.type.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;
@@ -26,10 +26,8 @@ export type UserService = {
     getMyGroups: (authEId: string) => Promise<WorkGroup[]>;
     getGroupById: (groupId: number) => Promise<WorkGroupMembers>;
     createGroup: (name: string, description: string, memberEIds: string[]) => Promise<WorkGroupMembers>;
-    updateGroup: (groupId: number, authEId: string, authRole: Roles, name?: string, description?: string) => Promise<WorkGroupMembers>;
+    updateGroup: (groupId: number, authEId: string, authRole: Roles, patch: UpdateGroup) => Promise<WorkGroupMembers>;
     removeGroup: (groupId: number, authEId: string, authRole: Roles) => Promise<boolean>;
-    addGroupMembers: (groupId: number, authEId: string, authRole: Roles, memberEIds: string[]) => Promise<WorkGroupMembers>;
-    removeGroupMembers: (groupId: number, authEId: string, authRole: Roles, memberEIds: string[]) => Promise<WorkGroupMembers>;
 
     // Guests
     getAllGuests: () => Promise<Guest[]>;
@@ -169,40 +167,53 @@ export function makeUserService(
         groupId: number,
         authEId: string,
         authRole: Roles,
-        name?: string,
-        description?: string
+        patch: UpdateGroup
     ): Promise<WorkGroupMembers> => {
-        await assertGroupAccess(groupId, authEId, authRole);
-        const updated = await repo.updateGroup(groupId, name, description);
-        if (!updated) throw new NotFoundError("Grupo no encontrado");
-        return enrichGroupMembers(updated);
+        const currentGroup = await assertGroupAccess(groupId, authEId, authRole);
+        const currentMemberIds = new Set(currentGroup.users.map((user) => user.eId));
+
+        const nextName = patch.name !== undefined && patch.name !== currentGroup.name ? patch.name : undefined;
+        const nextDescription = patch.description !== undefined && patch.description !== currentGroup.description ? patch.description : undefined;
+
+        const addMemberEIds = patch.addMemberEIds
+            ? [...new Set(patch.addMemberEIds)].filter((memberEId) => !currentMemberIds.has(memberEId))
+            : [];
+
+        const removeMemberEIds = patch.removeMemberEIds
+            ? [...new Set(patch.removeMemberEIds)].filter((memberEId) => currentMemberIds.has(memberEId))
+            : [];
+
+        if (
+            nextName === undefined &&
+            nextDescription === undefined &&
+            addMemberEIds.length === 0 &&
+            removeMemberEIds.length === 0
+        ) {
+            throw new UnprocessableError("No fields to update");
+        }
+
+        let updatedGroup = currentGroup;
+
+        if (nextName !== undefined || nextDescription !== undefined) {
+            const renamed = await repo.updateGroup(groupId, nextName, nextDescription);
+            if (!renamed) throw new NotFoundError("Grupo no encontrado");
+            updatedGroup = renamed;
+        }
+
+        if (addMemberEIds.length > 0) {
+            updatedGroup = await repo.addGroupMembers(groupId, addMemberEIds);
+        }
+
+        if (removeMemberEIds.length > 0) {
+            updatedGroup = await repo.removeGroupMembers(groupId, removeMemberEIds);
+        }
+
+        return enrichGroupMembers(updatedGroup);
     };
 
     const removeGroup = async (groupId: number, authEId: string, authRole: Roles): Promise<boolean> => {
         await assertGroupAccess(groupId, authEId, authRole);
         return repo.removeGroup(groupId);
-    };
-
-    const addGroupMembers = async (
-        groupId: number,
-        authEId: string,
-        authRole: Roles,
-        memberEIds: string[]
-    ): Promise<WorkGroupMembers> => {
-        await assertGroupAccess(groupId, authEId, authRole);
-        const group = await repo.addGroupMembers(groupId, memberEIds);
-        return enrichGroupMembers(group);
-    };
-
-    const removeGroupMembers = async (
-        groupId: number,
-        authEId: string,
-        authRole: Roles,
-        memberEIds: string[]
-    ): Promise<WorkGroupMembers> => {
-        await assertGroupAccess(groupId, authEId, authRole);
-        const group = await repo.removeGroupMembers(groupId, memberEIds);
-        return enrichGroupMembers(group);
     };
 
     const getUsers = async (query?:string, excludeId?:string): Promise<User[]> => {
@@ -266,8 +277,6 @@ export function makeUserService(
         createGroup,
         updateGroup,
         removeGroup,
-        addGroupMembers,
-        removeGroupMembers,
         getAllGuests,
         getGuestById,
         createGuest,
