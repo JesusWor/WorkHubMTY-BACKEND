@@ -19,6 +19,16 @@ export class PaginationInfo {
   }
 }
 
+export class CursorInfo {
+  nextCursor: string | null;
+  hasNext: boolean;
+
+  constructor(nextCursor: string | null) {
+    this.nextCursor = nextCursor;
+    this.hasNext = nextCursor !== null;
+  }
+}
+
 export class GlobalResponse {
   static ok(res: Response, message = 'Operación exitosa') {
     return res.status(200).json({ success: true, message });
@@ -46,6 +56,16 @@ export class GlobalResponse {
   ) {
     const pagination = new PaginationInfo(totalItems, currentPage, pageSize);
     return res.status(200).json({ success: true, message, data, pagination });
+  }
+
+  static okWithCursor<T>(
+    res: Response,
+    data: T,
+    nextCursor: string | null,
+    message = 'Datos obtenidos exitosamente',
+  ) {
+    const cursorInfo = new CursorInfo(nextCursor);
+    return res.status(200).json({ success: true, message, data, cursor: cursorInfo });
   }
 
   static fail(res: Response, message: string, statusCode = 400) {

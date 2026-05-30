@@ -1,8 +1,11 @@
 import { Db } from "../../infra/db/db.js";
+import { Cursor } from "../../shared/utils/cursor.utils.js";
 import {
     ParkingReservation,
     ParkingLot,
     ListReservationsQuery,
+    ListReservationsPage,
+    ListReservationsCursorSchema,
 } from "./parking-slots.schema.js";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -29,7 +32,7 @@ export type ParkingSlotsRepo = {
     deleteLot: (id: number) => Promise<boolean>;
 
     // Reservations - queries
-    listReservations: (query: ListReservationsQuery) => Promise<ParkingReservation[]>;
+    listReservations: (query: ListReservationsQuery) => Promise<ListReservationsPage>;
     getReservationById: (id: number) => Promise<ParkingReservation | null>;
     getReservationsByUser: (userId: string) => Promise<ParkingReservation[]>;
     getReservationByIdAndUser: (id: number, userId: string) => Promise<ParkingReservation | null>;
@@ -156,9 +159,12 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
     const listReservations = async (
         query: ListReservationsQuery
-    ): Promise<ParkingReservation[]> => {
+    ): Promise<ListReservationsPage> => {
         const conditions: string[] = [];
         const params: any[] = [];
+        const decodedCursor = query.cursor !== null
+            ? Cursor.decode(query.cursor, ListReservationsCursorSchema)
+            : null;
 
         if (query.user_id) {
             conditions.push("r.user_id = ?");
@@ -184,27 +190,39 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
             conditions.push("r.allocation_state = ?");
             params.push(query.allocation_state);
         }
-        if (query.cursor) {
+        if (decodedCursor) {
             conditions.push("r.id > ?");
-            params.push(query.cursor);
+            params.push(decodedCursor.lastId);
         }
 
         const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-        params.push(query.limit);
-
-        const { rows } = await db.query(
-            `SELECT
+        const hasLimit = query.limit !== undefined;
+        const limit = query.limit;
+        const sql = `
+            SELECT
                 r.id, r.user_id, r.start_time, r.end_time,
                 r.lifecycle_status, r.attendance_status, r.allocation_state,
                 r.canceled_at, r.created_at, r.updated_at
-             FROM parking_reservations r
-             ${where}
-             ORDER BY r.created_at ASC
-             LIMIT ?`,
-            params
-        );
-        return rows as ParkingReservation[];
+            FROM parking_reservations r
+            ${where}
+            ORDER BY r.id ASC
+            ${hasLimit ? "LIMIT ?" : ""}
+        `;
+        const queryParams = hasLimit ? [...params, (limit as number) + 1] : params;
+
+        const { rows } = await db.query(sql, queryParams);
+
+        const items = rows as ParkingReservation[];
+        const hasMore = hasLimit ? items.length > (limit as number) : false;
+        const pageItems = hasLimit && hasMore ? items.slice(0, limit as number) : items;
+        const nextCursor = hasLimit && hasMore && pageItems.length > 0
+            ? Cursor.encode({
+                lastId: pageItems[pageItems.length - 1].id,
+            })
+            : null;
+
+        return { items: pageItems, nextCursor };
     };
 
     const getReservationById = async (id: number): Promise<ParkingReservation | null> => {

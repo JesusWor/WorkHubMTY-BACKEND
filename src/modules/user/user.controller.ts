@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { UserService } from "./user.service.js";
-import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema } from "./user.schema.js";
+import { CreateUserSchema, CreateGuestSchema, UpdateGuestSchema, ListUsersQuerySchema } from "./user.schema.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { mapRole } from "../../middleware/index.js";
 
@@ -113,10 +113,17 @@ export function makeUserController(service: UserService): UserController {
     };
 
     const getUsers = async (req: Request, res: Response): Promise<void> => {
-        const query = req.query.query ? z.string().parse(req.query.query) : undefined;
-        const excludeId = req.query.excludeId ? z.string().parse(req.query.excludeId) : undefined;
-        const users = await service.getUsers(query, excludeId);
-        GlobalResponse.okWithData(res, users);
+        const auth = requireAuth(req, res);
+        if (!auth) return;
+
+        const parsed = ListUsersQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const users = await service.getUsers(parsed.data, auth.authEId);
+        GlobalResponse.okWithCursor(res, users.items, users.nextCursor);
     };
 
     const getPotentialFriends = async (req: Request, res: Response): Promise<void> => {

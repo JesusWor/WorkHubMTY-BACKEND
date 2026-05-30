@@ -5,6 +5,7 @@ import {
     ParkingLot,
     AttendanceStatus,
     ListReservationsQuery,
+    ListReservationsPage,
     ReservationBucketsQuery,
     ReservationBucket,
     ReservationDetailResponse,
@@ -12,6 +13,7 @@ import {
     UpdateParkingLot,
 } from "./parking-slots.schema.js";
 import {
+    BadRequestError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
@@ -128,7 +130,7 @@ export type ParkingSlotsService = {
     deleteLot: (id: number) => Promise<void>;
 
     // Reservations
-    listReservations: (query: ListReservationsQuery) => Promise<ParkingReservation[]>;
+    listReservations: (query: ListReservationsQuery) => Promise<ListReservationsPage>;
     getUserReservations: (userId: string) => Promise<ReservationDetailResponse[]>;
     getReservationDetail: (id: number, requesterId?: string) => Promise<ReservationDetailResponse>;
     getBuckets: (query: ReservationBucketsQuery) => Promise<ReservationBucket[]>;
@@ -184,9 +186,21 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
 
     // ── Reservations ──────────────────────────────────────────────────────────
 
+    function assertValidReservationsLimit(limit: number): void {
+        if (limit < 1 || limit > 100) {
+            throw new BadRequestError("limit debe estar entre 1 y 100");
+        }
+    }
+
     const listReservations = async (
         query: ListReservationsQuery
-    ): Promise<ParkingReservation[]> => repo.listReservations(query);
+    ): Promise<ListReservationsPage> => {
+        if (query.limit !== undefined) {
+            assertValidReservationsLimit(query.limit);
+        }
+
+        return repo.listReservations(query);
+    };
 
     const getUserReservations = async (userId: string): Promise<ReservationDetailResponse[]> => {
         const reservations = await repo.getReservationsByUser(userId);
