@@ -46,6 +46,10 @@ export type UpdateParkingLot = z.infer<typeof UpdateParkingLotSchema>;
 
 // Reservations
 
+export const ListReservationsCursorSchema = z.object({
+    lastId: z.number().int().positive(),
+});
+
 export const ParkingReservationSchema = z.object({
     id: z.number().int(),
     user_id: z.string().min(1, "El user_id es requerido").max(8, "El user_id no puede superar 8 caracteres"),
@@ -88,8 +92,8 @@ export const ListReservationsQuerySchema = z
         attendance_status: AttendanceStatusSchema.optional(),
         allocation_state: AllocationStateSchema.optional(),
         include: CsvArraySchema(QueryIncludeSchema).optional().default([]),
-        limit: z.coerce.number().int().min(1).max(100).default(50),
-        cursor: z.coerce.number().int().optional(),
+        limit: z.coerce.number().int().optional(),
+        cursor: z.string().nullable().optional().default(null),
     })
     .refine(data => {
         if (data.start_time && data.end_time) {
@@ -104,6 +108,14 @@ export const ListReservationsQuerySchema = z
     );
 
 export type ListReservationsQuery = z.infer<typeof ListReservationsQuerySchema>;
+
+export const ListReservationsPageSchema = z.object({
+    items: z.array(ParkingReservationSchema),
+    nextCursor: z.string().nullable(),
+});
+
+export type ListReservationsPage = z.infer<typeof ListReservationsPageSchema>;
+export type ListReservationsCursor = z.infer<typeof ListReservationsCursorSchema>;
 
 // GET /parking/reservations/:id (get by id)
 

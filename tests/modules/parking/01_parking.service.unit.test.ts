@@ -1,256 +1,157 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeParkingSlotsService } from '../../../src/modules/parking-slots/parking-slots.service';
-import { ParkingSlotsRepo } from '../../../src/modules/parking-slots/parking-slots.repo';
-import { ParkingReservation, ParkingReservationCount } from '../../../src/modules/parking-slots/parking-slots.schema';
-import { BadRequestError, ConflictError, NotFoundError } from '../../../src/shared/errors/AppError';
-import { JwtPayload } from '../../../src/shared/schemas/auth.schema';
-import { Roles } from '../../../src/middleware';
+import { describe, it, expect, vi } from 'vitest';
+import { makeParkingSlotsService } from '../../../src/modules/parking-slots/parking-slots.service.js';
+import { ParkingSlotsRepo } from '../../../src/modules/parking-slots/parking-slots.repo.js';
+import { BadRequestError } from '../../../src/shared/errors/AppError.js';
+import { JwtPayload } from '../../../src/shared/schemas/auth.schema.js';
+import { Roles } from '../../../src/middleware/index.js';
+import type {
+    ParkingLot,
+    ParkingReservation,
+    ListReservationsPage,
+} from '../../../src/modules/parking-slots/parking-slots.schema.js';
 
-function makeReservation(overrides: Partial<ParkingReservation> = {}): ParkingReservation {
+function makeReservation(id: number): ParkingReservation {
     return {
-        id: 1,
-        parking_lot_id: 1,
+        id,
         user_id: 'USR00001',
-        start_time: '2025-06-01T08:00:00',
-        end_time: '2025-06-01T18:00:00',
-        checked_in: false,
-        ...overrides,
+        start_time: new Date('2025-06-01T08:00:00.000Z'),
+        end_time: new Date('2025-06-01T18:00:00.000Z'),
+        lifecycle_status: 'ACTIVE',
+        attendance_status: 'NOT_ARRIVED',
+        allocation_state: 'SOFT',
+        created_at: new Date('2025-06-01T07:00:00.000Z'),
+        updated_at: new Date('2025-06-01T07:00:00.000Z'),
     };
 }
 
-function makeLots(overrides: Partial<ParkingReservationCount>[] = []): ParkingReservationCount[] {
-    // Ordered by capacity ASC as the repo returns them
-    const defaults: ParkingReservationCount[] = [
-        { id: 1, name: 'Lote Pequeño', capacity: 50,  reservedCount: 0  },
-        { id: 2, name: 'Lote Mediano', capacity: 200, reservedCount: 0  },
-        { id: 3, name: 'Lote Grande',  capacity: 500, reservedCount: 0  },
-    ];
-    return defaults.map((d, i) => ({ ...d, ...(overrides[i] ?? {}) }));
+function makePage(ids: number[], nextCursor: string | null = null): ListReservationsPage {
+    return {
+        items: ids.map(makeReservation),
+        nextCursor,
+    };
 }
 
 function makeMockRepo(overrides: Partial<ParkingSlotsRepo> = {}): ParkingSlotsRepo {
+    const noopLot = { id: 1, name: 'Lote A', capacity: 10, priority: 1 } satisfies ParkingLot;
+
     return {
-        getAll: vi.fn().mockResolvedValue([]),
-        getAvailabilityBetween: vi.fn().mockResolvedValue(makeLots()),
-        reserveBetween: vi.fn().mockResolvedValue(makeReservation()),
-        reassignParkingReservation: vi.fn().mockResolvedValue(makeReservation()),
-        remove: vi.fn().mockResolvedValue(true),
-        getById: vi.fn().mockResolvedValue(makeReservation()),
-        getByIdAndUser: vi.fn().mockResolvedValue(makeReservation()),
-        hasActiveReservation: vi.fn().mockResolvedValue(false),
+        getAllLots: vi.fn().mockResolvedValue([noopLot]),
+        getLotById: vi.fn(),
+        createLot: vi.fn(),
+        updateLot: vi.fn(),
+        deleteLot: vi.fn(),
+        listReservations: vi.fn().mockResolvedValue(makePage([1, 2])),
+        getReservationById: vi.fn(),
+        getReservationsByUser: vi.fn(),
+        getReservationByIdAndUser: vi.fn(),
+        hasActiveReservation: vi.fn(),
+        getOverlaps: vi.fn(),
+        getReservationCountInWindow: vi.fn(),
+        createReservation: vi.fn(),
+        cancelReservation: vi.fn(),
+        updateAttendanceStatus: vi.fn(),
+        markNoShowExpired: vi.fn(),
+        markNoShowForReservation: vi.fn(),
+        getPendingNoShowReservations: vi.fn(),
         ...overrides,
-    };
+    } as unknown as ParkingSlotsRepo;
 }
 
 const adminUser: JwtPayload = { eId: 'ADM00001', role: Roles.ADMIN };
-const regularUser: JwtPayload = { eId: 'USR00001', role: Roles.USER };
 
-const START = '2025-06-01T08:00:00';
-const END = '2025-06-01T18:00:00';
+describe('ParkingService.listReservations', () => {
+    it('retorna la pagina del repo cuando el limit esta en rango', async () => {
+        const repo = makeMockRepo();
+        const service = makeParkingSlotsService({
+            repo,
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
 
-describe('ParkingService.getAll', () => {
-    it('retorna todas las reservaciones', async () => {
-        const reservations = [makeReservation(), makeReservation({ id: 2, user_id: 'USR00002' })];
-        const repo = makeMockRepo({ getAll: vi.fn().mockResolvedValue(reservations) });
-        const service = makeParkingSlotsService(repo);
+        const result = await service.listReservations({ limit: 50, cursor: null });
 
-        const result = await service.getAll();
-        expect(result).toHaveLength(2);
-        expect(repo.getAll).toHaveBeenCalledTimes(1);
+        expect(result.items).toHaveLength(2);
+        expect(result.nextCursor).toBeNull();
+        expect(repo.listReservations).toHaveBeenCalledWith({ limit: 50, cursor: null });
     });
 
-    it('retorna arreglo vacío si no hay reservaciones', async () => {
-        const repo = makeMockRepo({ getAll: vi.fn().mockResolvedValue([]) });
-        const service = makeParkingSlotsService(repo);
+    it('deja limit ausente cuando no viene en la query', async () => {
+        const repo = makeMockRepo();
+        const service = makeParkingSlotsService({
+            repo,
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
 
-        const result = await service.getAll();
-        expect(result).toEqual([]);
+        await service.listReservations({ cursor: null });
+
+        expect(repo.listReservations).toHaveBeenCalledWith({ cursor: null });
+    });
+
+    it('rechaza limit menor a 1', async () => {
+        const service = makeParkingSlotsService({
+            repo: makeMockRepo(),
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
+
+        await expect(service.listReservations({ limit: 0, cursor: null }))
+            .rejects.toBeInstanceOf(BadRequestError);
+    });
+
+    it('rechaza limit mayor a 100', async () => {
+        const service = makeParkingSlotsService({
+            repo: makeMockRepo(),
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
+
+        await expect(service.listReservations({ limit: 101, cursor: null }))
+            .rejects.toBeInstanceOf(BadRequestError);
+    });
+
+    it('pasa el cursor encoded al repo sin decodificarlo en service', async () => {
+        const repo = makeMockRepo();
+        const service = makeParkingSlotsService({
+            repo,
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
+
+        await service.listReservations({ limit: 10, cursor: 'eyJsYXN0SWQiOjV9' });
+
+        expect(repo.listReservations).toHaveBeenCalledWith({
+            limit: 10,
+            cursor: 'eyJsYXN0SWQiOjV9',
+        });
     });
 });
 
-describe('ParkingService.getAvailabilityBetween', () => {
-    it('retorna disponibilidad de lotes', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
+describe('ParkingService smoke', () => {
+    it('sigue pudiendo crear una reserva con el contrato actual', async () => {
+        const repo = makeMockRepo({
+            hasActiveReservation: vi.fn().mockResolvedValue(false),
+            createReservation: vi.fn().mockResolvedValue(makeReservation(99)),
+        });
 
-        const result = await service.getAvailabilityBetween(START, END);
-        expect(result).toHaveLength(3);
-        expect(repo.getAvailabilityBetween).toHaveBeenCalledWith(START, END);
-    });
+        const service = makeParkingSlotsService({
+            repo,
+            friendshipService: { areFriends: vi.fn().mockResolvedValue(true) } as any,
+            queue: { add: vi.fn(), remove: vi.fn() } as any,
+            emitter: { emit: vi.fn() } as any,
+        });
 
-    it('lanza BadRequestError si end_time <= start_time', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
+        const reservation = await service.createReservation(adminUser, {
+            user_id: 'USR00001',
+            start_time: new Date('2025-06-02T08:00:00.000Z'),
+            end_time: new Date('2025-06-02T18:00:00.000Z'),
+        });
 
-        await expect(service.getAvailabilityBetween(END, START))
-            .rejects.toThrow(BadRequestError);
-        await expect(service.getAvailabilityBetween(START, START))
-            .rejects.toThrow(BadRequestError);
-    });
-});
-
-describe('ParkingService.autoReserveBetween', () => {
-    it('elige el cajón de MENOR capacidad disponible (primer lugar con espacio)', async () => {
-        // Lots ordered by capacity ASC: 50, 200, 500 — all available
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        await service.autoReserveBetween('USR00001', START, END);
-        // Should pick id=1 (capacity 50), not id=2 or id=3
-        expect(repo.reserveBetween).toHaveBeenCalledWith(1, 'USR00001', START, END);
-    });
-
-    it('salta cajones llenos y toma el siguiente de menor capacidad', async () => {
-        // Lote Pequeño (50) está lleno, Lote Mediano (200) tiene espacio
-        const lots = makeLots([
-            { id: 1, capacity: 50,  reservedCount: 50  }, // full
-            { id: 2, capacity: 200, reservedCount: 150 }, // available
-            { id: 3, capacity: 500, reservedCount: 0   },
-        ]);
-        const repo = makeMockRepo({ getAvailabilityBetween: vi.fn().mockResolvedValue(lots) });
-        const service = makeParkingSlotsService(repo);
-
-        await service.autoReserveBetween('USR00001', START, END);
-        expect(repo.reserveBetween).toHaveBeenCalledWith(2, 'USR00001', START, END);
-    });
-
-    it('el reservedCount refleja empalmes reales (no reservas fuera del rango)', async () => {
-        // This validates that the repo is called with the correct time range
-        // so only overlapping reservations are counted
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        await service.autoReserveBetween('USR00001', START, END);
-        expect(repo.getAvailabilityBetween).toHaveBeenCalledWith(START, END);
-    });
-
-    it('lanza BadRequestError si end_time <= start_time', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.autoReserveBetween('USR00001', END, START))
-            .rejects.toThrow(BadRequestError);
-    });
-
-    it('lanza ConflictError si el usuario ya tiene reservación activa', async () => {
-        const repo = makeMockRepo({ hasActiveReservation: vi.fn().mockResolvedValue(true) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.autoReserveBetween('USR00001', START, END))
-            .rejects.toThrow(ConflictError);
-        await expect(service.autoReserveBetween('USR00001', START, END))
-            .rejects.toThrow('Ya tienes una reservación de estacionamiento en ese horario');
-    });
-
-    it('lanza ConflictError si todos los cajones están llenos (empalme completo)', async () => {
-        const fullLots = makeLots([
-            { id: 1, capacity: 50,  reservedCount: 50  },
-            { id: 2, capacity: 200, reservedCount: 200 },
-            { id: 3, capacity: 500, reservedCount: 500 },
-        ]);
-        const repo = makeMockRepo({ getAvailabilityBetween: vi.fn().mockResolvedValue(fullLots) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.autoReserveBetween('USR00001', START, END))
-            .rejects.toThrow(ConflictError);
-        await expect(service.autoReserveBetween('USR00001', START, END))
-            .rejects.toThrow('No hay lugares de estacionamiento disponibles');
-    });
-
-    it('llama a hasActiveReservation con los parámetros correctos', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        await service.autoReserveBetween('USR00001', START, END);
-        expect(repo.hasActiveReservation).toHaveBeenCalledWith('USR00001', START, END);
-    });
-});
-
-describe('ParkingService.reassignParkingReservation', () => {
-    it('reasigna a un lote con disponibilidad', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        // Lot 1 is available (capacity=5, reserved=0)
-        const result = await service.reassignParkingReservation(1, 1);
-        expect(result).not.toBeNull();
-        expect(repo.reassignParkingReservation).toHaveBeenCalledWith(1, 1);
-    });
-
-    it('lanza NotFoundError si la reservación no existe', async () => {
-        const repo = makeMockRepo({ getById: vi.fn().mockResolvedValue(null) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.reassignParkingReservation(99, 1))
-            .rejects.toThrow(NotFoundError);
-        await expect(service.reassignParkingReservation(99, 1))
-            .rejects.toThrow('no existe');
-    });
-
-    it('lanza NotFoundError si el lote destino no existe', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        // parking_lot_id 99 is not in the availability list
-        await expect(service.reassignParkingReservation(1, 99))
-            .rejects.toThrow(NotFoundError);
-    });
-
-    it('lanza ConflictError si el cajón destino está lleno (con empalme)', async () => {
-        const fullLots = makeLots([
-            { id: 1, capacity: 50,  reservedCount: 50  },
-            { id: 2, capacity: 200, reservedCount: 200 },
-            { id: 3, capacity: 500, reservedCount: 500 },
-        ]);
-        const repo = makeMockRepo({ getAvailabilityBetween: vi.fn().mockResolvedValue(fullLots) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.reassignParkingReservation(1, 1))
-            .rejects.toThrow(ConflictError);
-    });
-});
-
-describe('ParkingService.remove', () => {
-    it('admin puede eliminar cualquier reservación', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        const result = await service.remove(1, adminUser);
-        expect(result).toBe(true);
-        expect(repo.getById).toHaveBeenCalledWith(1);
-        expect(repo.remove).toHaveBeenCalledWith(1);
-    });
-
-    it('usuario regular solo puede eliminar sus propias reservaciones', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        await service.remove(1, regularUser);
-        expect(repo.getByIdAndUser).toHaveBeenCalledWith(1, 'USR00001');
-        expect(repo.getById).not.toHaveBeenCalled();
-    });
-
-    it('lanza NotFoundError si la reservación no existe (admin)', async () => {
-        const repo = makeMockRepo({ getById: vi.fn().mockResolvedValue(null) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.remove(99, adminUser))
-            .rejects.toThrow(NotFoundError);
-    });
-
-    it('lanza NotFoundError si la reservación no le pertenece al usuario', async () => {
-        const repo = makeMockRepo({ getByIdAndUser: vi.fn().mockResolvedValue(null) });
-        const service = makeParkingSlotsService(repo);
-
-        await expect(service.remove(1, regularUser))
-            .rejects.toThrow(NotFoundError);
-    });
-
-    it('retorna true cuando la eliminación es exitosa', async () => {
-        const repo = makeMockRepo();
-        const service = makeParkingSlotsService(repo);
-
-        const result = await service.remove(1, adminUser);
-        expect(result).toBe(true);
+        expect(reservation.id).toBe(99);
     });
 });
