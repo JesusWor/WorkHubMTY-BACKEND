@@ -1,4 +1,5 @@
 import { ParkingSlotsRepo } from "./parking-slots.repo.js";
+import { FriendshipService } from "../friendship/friendship.service.js";
 import {
     ParkingReservation,
     ParkingLot,
@@ -113,6 +114,7 @@ function noShowDelay(startTime: Date): number {
 
 export type ParkingSlotsServiceDeps = {
     repo: ParkingSlotsRepo;
+    friendshipService: FriendshipService;
     queue: Queue<NoShowJobData>;
     emitter: ParkingEventsEmitter;
 };
@@ -127,7 +129,8 @@ export type ParkingSlotsService = {
 
     // Reservations
     listReservations: (query: ListReservationsQuery) => Promise<ParkingReservation[]>;
-    getReservationDetail: (id: number) => Promise<ReservationDetailResponse>;
+    getUserReservations: (userId: string) => Promise<ReservationDetailResponse[]>;
+    getReservationDetail: (id: number, requesterId?: string) => Promise<ReservationDetailResponse>;
     getBuckets: (query: ReservationBucketsQuery) => Promise<ReservationBucket[]>;
 
     createReservation: (
@@ -147,7 +150,7 @@ export type ParkingSlotsService = {
     runNoShowSweep: () => Promise<number>;
 };
 
-export function makeParkingSlotsService({ repo, queue, emitter }: ParkingSlotsServiceDeps): ParkingSlotsService {
+export function makeParkingSlotsService({ repo, friendshipService, queue, emitter }: ParkingSlotsServiceDeps): ParkingSlotsService {
 
     // ── Parking Lots ──────────────────────────────────────────────────────────
 
@@ -185,9 +188,20 @@ export function makeParkingSlotsService({ repo, queue, emitter }: ParkingSlotsSe
         query: ListReservationsQuery
     ): Promise<ParkingReservation[]> => repo.listReservations(query);
 
-    const getReservationDetail = async (id: number): Promise<ReservationDetailResponse> => {
+    const getUserReservations = async (userId: string): Promise<ReservationDetailResponse[]> => {
+        const reservations = await repo.getReservationsByUser(userId);
+        return Promise.all(
+            reservations.map((r) => getReservationDetail(r.id, userId))
+        );
+    };
+
+    const getReservationDetail = async (id: number, requesterId?: string): Promise<ReservationDetailResponse> => {
         const reservation = await repo.getReservationById(id);
         if (!reservation) throw new NotFoundError(`La reservación ${id} no existe`);
+
+        if (requesterId && !(await friendshipService.areFriends(reservation.user_id, requesterId))) {
+            throw new ForbiddenError("No tienes permiso para acceder a esta reservación");
+        }
 
         const lots = await repo.getAllLots();
         const projection = await computeProjection(repo, reservation, lots);
@@ -367,6 +381,7 @@ export function makeParkingSlotsService({ repo, queue, emitter }: ParkingSlotsSe
         deleteLot,
 
         listReservations,
+        getUserReservations,
         getReservationDetail,
         getBuckets,
 
