@@ -26,6 +26,7 @@ export function makeTeamsService(
   teamsRepo: TeamsRepo,
   userStatusService: UserStatusService,
 ): TeamsService {
+  
   const getTeamMembers = (teamId: string) => {
     return teamsRepo.getTeamMembers(teamId);
   };

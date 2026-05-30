@@ -17,15 +17,19 @@ export function makeTeamsRepo(db: Db): TeamsRepo {
   const getTeamMembers = async (teamId: string) => {
     const { rows } = await db.query(
       `
-        SELECT 
-            id,
-            name,
-            COUNT(members.userId) AS membersCount
-        FROM work_groups teams
-        JOIN work_group_members members ON 
-            teams.id = members.workGroupId
-        WHERE teams.id = ?
-        GROUP BY teams.id;
+      SELECT 
+        u.e_id AS eId,  
+        u.name,
+        u.email,
+        r.name AS role
+      FROM work_groups wg
+      JOIN work_group_members wgm ON
+        wg.id = wgm.workGroupId
+      JOIN users u ON 
+        u.e_id = wgm.userId
+      JOIN roles r ON
+        u.role_id = r.id
+      WHERE wg.id = ?;
         `,
       [teamId],
     );

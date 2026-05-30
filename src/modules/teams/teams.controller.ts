@@ -4,9 +4,9 @@ import { CreateGroupSchema, teamIdSchema } from "./teams.schema.js";
 import { GlobalResponse } from "../../shared/response/globalresponse.js";
 import { z } from "zod";
 export type TeamsController = {
-  getTeamMembers: (req: Request) => Promise<any>;
-      getTeamById: (req: Request, res: Response) => Promise<void>;
-    createTeam: (req: Request, res: Response) => Promise<void>;
+  getTeamMembers: (req: Request, res: Response) => Promise<void>;
+  getTeamById: (req: Request, res: Response) => Promise<void>;
+  createTeam: (req: Request, res: Response) => Promise<void>;
 };
 
 export function makeTeamsController(service: TeamsService): TeamsController {
@@ -23,9 +23,10 @@ export function makeTeamsController(service: TeamsService): TeamsController {
     return parsed.data;
   };
 
-  const getTeamMembers = async (req: Request) => {
-    const teamId = teamIdSchema.parse(req.params);
-    return service.getTeamMembers(teamId);
+  const getTeamMembers = async (req: Request, res: Response) => {
+    const teamId = teamIdSchema.parse(req.params.teamId);
+    const members = await service.getTeamMembers(teamId);
+    GlobalResponse.okWithData(res, members);
   };
 
   const getTeamById = async (req: Request, res: Response): Promise<void> => {
@@ -49,6 +50,6 @@ export function makeTeamsController(service: TeamsService): TeamsController {
   return {
     getTeamMembers,
     getTeamById,
-    createTeam
+    createTeam,
   };
 }

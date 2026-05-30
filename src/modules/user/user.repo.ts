@@ -255,9 +255,9 @@ export function makeUserRepo(db: Db): UserRepo {
                 wg.id,
                 wg.name,
                 wg.description,
-                COUNT(wgm.user_id) AS memberCount
+                COUNT(wgm.userId) AS memberCount
             FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id
+            LEFT JOIN work_group_members wgm ON wg.id = wgm.workGroupId
             GROUP BY wg.id;
         `);
         return rows as WorkGroup[];
@@ -269,13 +269,13 @@ export function makeUserRepo(db: Db): UserRepo {
                 wg.id,
                 wg.name,
                 wg.description,
-                COUNT(wgm_all.user_id) AS memberCount
+                COUNT(wgm_all.userId) AS memberCount
             FROM work_groups wg
             INNER JOIN work_group_members wgm_me
-                ON wg.id = wgm_me.work_group_id
+                ON wg.id = wgm_me.workGroupId
             LEFT JOIN work_group_members wgm_all
-                ON wg.id = wgm_all.work_group_id
-            WHERE wgm_me.user_id = ?
+                ON wg.id = wgm_all.workGroupId
+            WHERE wgm_me.userId = ?
             GROUP BY wg.id, wg.name, wg.description
             ORDER BY wg.id DESC;
         `, [userId]);
@@ -294,8 +294,8 @@ export function makeUserRepo(db: Db): UserRepo {
                 u.email AS userEmail,
                 u.role_name AS userRole
             FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wg.id = wgm.work_group_id
-            LEFT JOIN public_users_view u ON wgm.user_id = u.e_id
+            LEFT JOIN work_group_members wgm ON wg.id = wgm.workGroupId
+            LEFT JOIN public_users_view u ON wgm.userId = u.e_id
             WHERE wg.id = ?;
         `, [groupId]);
 
@@ -359,7 +359,7 @@ export function makeUserRepo(db: Db): UserRepo {
         const params = memberEIds.flatMap(userId => [groupId, userId]);
 
         await db.execute(`
-            INSERT INTO work_group_members (work_group_id, user_id)
+            INSERT INTO work_group_members (workGroupId, userId)
             VALUES ${values};
         `, params);
 
@@ -371,8 +371,8 @@ export function makeUserRepo(db: Db): UserRepo {
         const params = [groupId, ...memberEIds];
         await db.execute(`
             DELETE FROM work_group_members
-            WHERE work_group_id = ?
-            AND user_id IN (${placeholders});
+            WHERE workGroupId = ?
+            AND userId IN (${placeholders});
         `, params);
 
         return getGroupById(groupId) as Promise<WorkGroupMembers>;
