@@ -51,7 +51,7 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        const parsed = RemoveRelationSchema.safeParse(req.body);
+        const parsed = RemoveRelationSchema.safeParse(req.params.userId);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
