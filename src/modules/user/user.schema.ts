@@ -24,6 +24,7 @@ export const UserSchema = z.object({
     name: z.string(),
     email: z.email(),
     roleName: z.string(),
+    title: z.string().nullable(),
     status: UserStatusSchema.default("offline"),
 });
 

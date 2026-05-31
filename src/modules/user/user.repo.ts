@@ -33,6 +33,7 @@ type UserSearchRow = {
     name: string;
     email: string;
     roleName: string;
+    title: string | null;
     searchScore: number;
     normalizedName: string;
 };
@@ -50,7 +51,8 @@ export function makeUserRepo(db: Db): UserRepo {
                 e_id AS eId,
                 name,
                 email,
-                role_name AS roleName
+                role_name AS roleName,
+                title
             FROM public_users_view
             WHERE e_id = ?`,
             [eId],
@@ -68,7 +70,8 @@ export function makeUserRepo(db: Db): UserRepo {
                 e_id AS eId,
                 name,
                 email,
-                role_name AS roleName
+                role_name AS roleName,
+                title
              FROM public_users_view
              WHERE e_id IN (${placeholders})`,
             eIds,
@@ -153,6 +156,7 @@ export function makeUserRepo(db: Db): UserRepo {
                 filtered.name,
                 filtered.email,
                 filtered.roleName,
+                filtered.title,
                 filtered.searchScore
             FROM (
                 SELECT
@@ -160,6 +164,7 @@ export function makeUserRepo(db: Db): UserRepo {
                     u.name,
                     u.email,
                     u.role_name AS roleName,
+                    u.title,
                     ${scoreExpr} AS searchScore,
                     LOWER(u.name) AS normalizedName
                 FROM public_users_view u
@@ -238,6 +243,7 @@ export function makeUserRepo(db: Db): UserRepo {
             u.name,
             u.email,
             u.role_name AS roleName,
+            u.title,
             CASE
             WHEN fr.from_user = ? AND fr.to_user = u.e_id THEN 'PENDING_SENT'
             WHEN fr.from_user = u.e_id AND fr.to_user = ? THEN 'PENDING_RECEIVED'
