@@ -138,8 +138,13 @@ export function makeUserService(
         return {
             ...user,
             status,
-            friendCount: friends.length,
-            achievementCount: achievements.length,
+            stats:{
+                streak: 20,
+                friendCount: friends.length,
+                levelsPassed: achievements.length,
+                hoursInOffice: 100, // This would be calculated or fetched from somewhere
+                points:2300
+            }
         };
     };
 
