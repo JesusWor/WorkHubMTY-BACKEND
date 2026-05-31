@@ -1,95 +1,66 @@
-import { Worker, Job } from "bullmq";
-import {
-    PARKING_QUEUE_NAME,
-    NoShowJobData,
-    CheckoutJobData,
-    ParkingJobData,
-    bullmqConnection,
-} from "./parking-queue.js";
-import { parkingEvents } from "../events/parking-events.emitter.js";
-import { ParkingReservation } from "../../modules/parking-slots/parking-slots.schema.js";
+import { parkingQueue, CHECKIN_TOLERANCE_MINUTES_EXPORT } from "./parking-queue.js";
+import { ParkingSlotsRepo } from "../../modules/parking-slots/parking-slots.repo.js";
 
-export type ParkingWorkerDeps = {
-    markNoShowForReservation: (reservationId: number) => Promise<
-        | { marked: true; reservation: ParkingReservation }
-        | { marked: false; reason: string }
-    >;
-    markCheckoutForReservation: (reservationId: number) => Promise<
-        | { action: "checked_out" | "no_show_fallback"; reservation: ParkingReservation }
-        | { action: "skipped"; reason: string }
-    >;
-};
+export async function reviveParkingJobs(repo: ParkingSlotsRepo): Promise<void> {
+    await Promise.all([
+        reviveNoShowJobs(repo),
+        reviveCheckoutJobs(repo),
+    ]);
+}
 
-export function createParkingWorker(deps: ParkingWorkerDeps): Worker {
-    const worker = new Worker<ParkingJobData>(
-        PARKING_QUEUE_NAME,
-        async (job: Job<ParkingJobData>) => {
-            switch (job.name) {
-                case "no-show":
-                    return handleNoShow(job as Job<NoShowJobData>, deps);
-                case "auto-checkout":
-                    return handleAutoCheckout(job as Job<CheckoutJobData>, deps);
-                default:
-                    console.warn(`[parking-worker] Job desconocido ignorado: ${job.name}`);
-            }
-        },
-        {
-            connection: bullmqConnection,
-            concurrency: 5,
-        }
+async function reviveNoShowJobs(repo: ParkingSlotsRepo): Promise<void> {
+    const pending = await repo.getPendingNoShowReservations(CHECKIN_TOLERANCE_MINUTES_EXPORT);
+
+    if (pending.length === 0) {
+        console.log("[revival] No hay jobs de no-show pendientes por re-encolar");
+        return;
+    }
+
+    console.log(`[revival] Re-encolando ${pending.length} jobs de no-show...`);
+
+    await Promise.all(
+        pending.map(({ id, start_time }) => {
+            const triggerAt = new Date(start_time).getTime() + CHECKIN_TOLERANCE_MINUTES_EXPORT * 60_000;
+            const delay = Math.max(0, triggerAt - Date.now());
+
+            return parkingQueue.add(
+                "no-show",
+                { reservationId: id },
+                {
+                    delay,
+                    jobId: `noshow-${id}`,
+                }
+            );
+        })
     );
 
-    worker.on("failed", (job, err) => {
-        console.error(`[parking-worker] Job ${job?.id} (${job?.name}) falló:`, err.message);
-    });
-
-    worker.on("error", (err) => {
-        console.error("[parking-worker] Error en el worker:", err.message);
-    });
-
-    return worker;
+    console.log(`[revival] ${pending.length} jobs de no-show re-encolados`);
 }
 
-async function handleNoShow(
-    job: Job<NoShowJobData>,
-    deps: ParkingWorkerDeps
-): Promise<void> {
-    const { reservationId } = job.data;
-    console.log(`[parking-worker] Procesando no-show job para reservación ${reservationId}`);
+async function reviveCheckoutJobs(repo: ParkingSlotsRepo): Promise<void> {
+    const pending = await repo.getPendingCheckoutReservations();
 
-    const result = await deps.markNoShowForReservation(reservationId);
-
-    if (result.marked) {
-        console.log(`[parking-worker] Reservación ${reservationId} marcada como NO_SHOW`);
-        parkingEvents.emit("reservation.no_show", result.reservation);
-    } else {
-        console.log(`[parking-worker] Reservación ${reservationId} omitida: ${result.reason}`);
+    if (pending.length === 0) {
+        console.log("[revival] No hay jobs de auto-checkout pendientes por re-encolar");
+        return;
     }
-}
 
-async function handleAutoCheckout(
-    job: Job<CheckoutJobData>,
-    deps: ParkingWorkerDeps
-): Promise<void> {
-    const { reservationId } = job.data;
-    console.log(`[parking-worker] Procesando auto-checkout job para reservación ${reservationId}`);
+    console.log(`[revival] Re-encolando ${pending.length} jobs de auto-checkout...`);
 
-    const result = await deps.markCheckoutForReservation(reservationId);
+    await Promise.all(
+        pending.map(({ id, end_time }) => {
+            const delay = Math.max(0, new Date(end_time).getTime() - Date.now());
 
-    switch (result.action) {
-        case "checked_out":
-            console.log(`[parking-worker] Reservación ${reservationId} marcada como CHECKED_OUT (auto)`);
-            parkingEvents.emit("reservation.attendance_updated", result.reservation);
-            break;
-        case "no_show_fallback":
-            console.warn(
-                `[parking-worker] Reservación ${reservationId} marcada NO_SHOW por fallback defensivo ` +
-                `en auto-checkout. El job de no-show pudo haber fallado o el servidor reinició.`
+            return parkingQueue.add(
+                "auto-checkout",
+                { reservationId: id },
+                {
+                    delay,
+                    jobId: `checkout-${id}`,
+                }
             );
-            parkingEvents.emit("reservation.no_show", result.reservation);
-            break;
-        case "skipped":
-            console.log(`[parking-worker] Reservación ${reservationId} omitida en auto-checkout: ${result.reason}`);
-            break;
-    }
+        })
+    );
+
+    console.log(`[revival] ${pending.length} jobs de auto-checkout re-encolados`);
 }
