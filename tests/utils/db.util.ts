@@ -49,6 +49,46 @@ const seeders: { [K in SeedTable]: (conn: mysql.Connection) => Promise<void> } =
         }
     },
 
+    achievement_icons: async (conn) => {
+        for (const icon of seed.achievement_icons) {
+            await conn.query(
+                'INSERT INTO achievement_icons (id, name) VALUES (?, ?)',
+                [icon.id, icon.name]
+            );
+        }
+    },
+
+    achievements: async (conn) => {
+        for (const achievement of seed.achievements) {
+            await conn.query(
+                'INSERT INTO achievements (id, name, iconId) VALUES (?, ?, ?)',
+                [achievement.id, achievement.name, achievement.iconId]
+            );
+        }
+    },
+
+    achievement_levels: async (conn) => {
+        for (const level of seed.achievement_levels) {
+            await conn.query(
+                `INSERT INTO achievement_levels
+                    (achievementId, level, progressRequired, description)
+                 VALUES (?, ?, ?, ?)`,
+                [level.achievementId, level.level, level.progressRequired, level.description]
+            );
+        }
+    },
+
+    user_achievements: async (conn) => {
+        for (const userAchievement of seed.user_achievements) {
+            await conn.query(
+                `INSERT INTO user_achievements
+                    (userId, achievementId, progress)
+                 VALUES (?, ?, ?)`,
+                [userAchievement.userId, userAchievement.achievementId, userAchievement.progress]
+            );
+        }
+    },
+
     parking_lots: async (conn) => {
         for (const lot of seed.parking_lots) {
             await conn.query(

@@ -28,7 +28,7 @@ export async function reviveNoShowJobs(repo: ParkingSlotsRepo): Promise<void> {
                 { reservationId: id },
                 {
                     delay,
-                    jobId: `no-show:${id}`,
+                    jobId: `noshow-${id}`,
                     // BullMQ ignora el add si el jobId ya existe en la queue
                 }
             );

@@ -77,7 +77,7 @@ export function makeUserController(service: UserService): UserController {
     };
 
     const getUserFriendships = async (req: Request, res: Response): Promise<void> => {
-        const paramId = z.string().parse(req.params.id);
+        const paramId = z.string().parse(req.params.eId);
         if (!paramId) {
             GlobalResponse.badRequest(res, "User id is required");
             return;

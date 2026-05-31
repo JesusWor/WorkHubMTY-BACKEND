@@ -104,7 +104,7 @@ async function computeProjection(
 // ─── Helpers de queue ─────────────────────────────────────────────────────────
 
 function noShowJobId(reservationId: number): string {
-    return `no-show:${reservationId}`;
+    return `noshow-${reservationId}`;
 }
 
 function noShowDelay(startTime: Date): number {
@@ -277,14 +277,19 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         if (!reservation) throw new ConflictError("No fue posible crear la reservación");
 
         // Encolar el delayed job de no-show
-        await queue.add(
-            "no-show",
-            { reservationId: reservation.id },
-            {
-                delay: noShowDelay(reservation.start_time),
-                jobId: noShowJobId(reservation.id),
-            }
-        );
+        try {
+            await queue.add(
+                "no-show",
+                { reservationId: reservation.id },
+                {
+                    delay: noShowDelay(reservation.start_time),
+                    jobId: noShowJobId(reservation.id),
+                }
+            );
+            console.log(`Job de no-show encolado para reservación ${reservation.id}`);
+        } catch (err) {
+            console.error("Error al encolar job de no-show:", (err as Error).message);
+        };
 
         emitter.emit("reservation.created", reservation);
         return reservation;

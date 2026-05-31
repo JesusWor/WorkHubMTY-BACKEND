@@ -6,13 +6,19 @@ import { env } from './config/env.js';
 import { buildContainer } from './app/container.js';
 import { initSocket } from './infra/websocket/socket.server.js';
 import { reviveNoShowJobs } from './infra/queue/parking-revival.js';
+import { validateAchievementsListenerRules } from './modules/achievements/index.js';
 
 const container = buildContainer();
+await validateAchievementsListenerRules(container.achievementsService);
 const app = createApp(container);
 const server = http.createServer(app);
 const PORT = env.server.port;
 
-initSocket(server, container.userStatusService);
+initSocket(server, {
+    userStatusService: container.userStatusService,
+    userService: container.userService,
+    teamsService: container.teamsService,
+});
 
 server.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on port ${PORT}`);
