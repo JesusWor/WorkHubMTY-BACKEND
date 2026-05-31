@@ -13,7 +13,7 @@ export type FriendshipRepo = {
     // Requests
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<FriendRequest[]>;
-    createRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
+    createRequest: (fromUser: string, toUserIds: string[]) => Promise<FriendRequest | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<boolean>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
     rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
@@ -120,11 +120,12 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
         return rows as FriendRequest[];
     };
 
-    const createRequest = async (fromUser: string, toUser: string): Promise<FriendRequest | null> => {
+    const createRequest = async (fromUser: string, toUserIds: string[]): Promise<FriendRequest | null> => {
+
         const result = await db.query(`
             INSERT IGNORE INTO friend_requests (from_user, to_user)
-            VALUES (?, ?)
-        `, [fromUser, toUser]);
+            VALUES ${toUserIds.map(() => `(?, ?)`).join(", ")}}
+        `, [...toUserIds.flatMap(id => [fromUser, id])]);
 
         if ((result.rows as any).affectedRows === 0) return null;
 

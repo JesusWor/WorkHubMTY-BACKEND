@@ -23,7 +23,7 @@ export const FriendRequestSchema = z.object({
 });
 
 export const CreateFriendRequestSchema = z.object({
-    toUser: z.string()
+    toUserIds: z.array(z.string())
 });
 
 export const AcceptFriendRequestSchema = z.object({

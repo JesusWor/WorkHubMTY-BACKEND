@@ -11,7 +11,7 @@ export type FriendshipService = {
 
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<FriendRequest[]>;
-    createRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
+    createRequest: (fromUser: string, toUserIds: string[]) => Promise<FriendRequest | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<Friendship | null>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
     rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
@@ -67,14 +67,14 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         return await repo.getSentRequests(eId);
     };
 
-    const createRequest = async (fromUser: string, toUser: string): Promise<FriendRequest | null> => {
-        if (!fromUser || !toUser) throw new BadRequestError("Both user ids are required");
-        if (fromUser === toUser) throw new BadRequestError("A user cannot send a friend request to themselves");
+    const createRequest = async (fromUser: string, toUserIds: string[]): Promise<FriendRequest | null> => {
+        if (!fromUser || !toUserIds || toUserIds.length === 0) throw new BadRequestError("Both user ids are required");
+        if (toUserIds.includes(fromUser)) throw new BadRequestError("A user cannot send a friend request to themselves");
 
-        const alreadyFriends = await repo.areFriends(fromUser, toUser);
+        const alreadyFriends = await repo.areFriends(fromUser, toUserIds[0]);
         if (alreadyFriends) throw new ConflictError("Users are already friends");
 
-        const request = await repo.createRequest(fromUser, toUser);
+        const request = await repo.createRequest(fromUser, toUserIds);
         if (!request) throw new ConflictError("Friend request already pending");
 
         return request;
