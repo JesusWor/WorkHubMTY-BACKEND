@@ -44,9 +44,7 @@ export const AcceptFriendRequestSchema = z.object({
     fromUser: z.string()
 });
 
-export const RemoveRelationSchema = z.object({
-    userId: z.string()
-});
+export const RemoveRelationSchema = z.string();
 
 export type Friendship = z.infer<typeof FriendshipSchema>;
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
