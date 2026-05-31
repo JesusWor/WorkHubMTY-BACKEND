@@ -6,22 +6,35 @@ import {
     ListReservationsQuery,
     ListReservationsPage,
     ListReservationsCursorSchema,
+    AttendanceStatus,
+    inferLifecycleStatus,
 } from "./parking-slots.schema.js";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 export type OverlapRow = Pick<
     ParkingReservation,
-    "id" | "user_id" | "created_at" | "allocation_state" | "lifecycle_status" | "attendance_status"
+    "id" | "user_id" | "created_at" | "attendance_status" | "lifecycle_status"
 >;
 
 const OCCUPANCY_FILTER = `
-    attendance_status NOT IN ('CHECKED_OUT', 'NO_SHOW')
-    AND (
-        lifecycle_status = 'ACTIVE'
-        OR (lifecycle_status = 'CANCELED' AND allocation_state = 'FROZEN')
-    )
+    attendance_status NOT IN ('CHECKED_OUT', 'NO_SHOW', 'CANCELED')
 ` as const;
+
+function lifecycleToAttendanceStatuses(lc: "ACTIVE" | "CANCELED" | "FINALIZED"): AttendanceStatus[] {
+    switch (lc) {
+        case "ACTIVE": return ["NOT_ARRIVED", "CHECKED_IN"];
+        case "CANCELED": return ["CANCELED"];
+        case "FINALIZED": return ["CHECKED_OUT", "NO_SHOW"];
+    }
+}
+
+type ReservationRow = Omit<ParkingReservation, "lifecycle_status">;
+
+function hydrateReservation(row: ReservationRow): ParkingReservation {
+    return {
+        ...row,
+        lifecycle_status: inferLifecycleStatus(row.attendance_status),
+    };
+}
 
 export type ParkingSlotsRepo = {
     // Parking Lots
@@ -37,15 +50,10 @@ export type ParkingSlotsRepo = {
     getReservationsByUser: (userId: string) => Promise<ParkingReservation[]>;
     getReservationByIdAndUser: (id: number, userId: string) => Promise<ParkingReservation | null>;
 
-    /**
-     * Verifica si el usuario ya tiene una reserva que cuente como ocupancy
-     * solapada con el rango dado. Usa occupancy semantics completas.
-     */
     hasActiveReservation: (userId: string, startTime: Date, endTime: Date) => Promise<boolean>;
 
     /**
      * Overlaps que cuentan como occupancy para FIFO projection.
-     * Usa occupancy semantics completas.
      */
     getOverlaps: (reservationId: number, startTime: Date, endTime: Date) => Promise<OverlapRow[]>;
 
@@ -56,43 +64,31 @@ export type ParkingSlotsRepo = {
 
     // Mutations
     createReservation: (userId: string, startTime: Date, endTime: Date) => Promise<ParkingReservation | null>;
-    cancelReservation: (id: number, freeze: boolean) => Promise<ParkingReservation | null>;
-    updateAttendanceStatus: (id: number, attendanceStatus: string, freeze?: boolean) => Promise<ParkingReservation | null>;
 
-    /**
-     * Cron: marca NO_SHOW + FROZEN las reservas donde:
-     *   lifecycle_status = ACTIVE
-     *   attendance_status = NOT_ARRIVED
-     *   NOW() >= start_time + checkinToleranceMinutes
-     *
-     * @param checkinToleranceMinutes minutos de gracia tras start_time para hacer check-in
-     */
+    cancelReservation: (id: number) => Promise<ParkingReservation | null>;
+
+    updateAttendanceStatus: (id: number, attendanceStatus: AttendanceStatus) => Promise<ParkingReservation | null>;
+
     markNoShowExpired: (checkinToleranceMinutes: number) => Promise<number>;
 
-    /**
-     * Marca NO_SHOW + FROZEN para una reservación puntual (usada por el BullMQ worker).
-     * Solo actúa si la reservación cumple las condiciones (NOT_ARRIVED + ACTIVE),
-     * evitando race conditions con check-ins manuales.
-     *
-     * @returns { marked: true, reservation } si se aplicó el cambio,
-     *          { marked: false, reason } si ya no aplica.
-     */
     markNoShowForReservation: (reservationId: number) => Promise<
         | { marked: true; reservation: ParkingReservation }
         | { marked: false; reason: string }
     >;
 
-    /**
-     * Revival: devuelve reservaciones que aún deben recibir un no-show job.
-     * Útil al reiniciar el servidor para re-encolar jobs perdidos.
-     * Sólo retorna reservaciones cuyo trigger time (start_time + toleranceMinutes) está en el futuro.
-     */
+    markCheckoutForReservation: (reservationId: number) => Promise<
+        | { action: "checked_out" | "no_show_fallback"; reservation: ParkingReservation }
+        | { action: "skipped"; reason: string }
+    >;
+
     getPendingNoShowReservations: (checkinToleranceMinutes: number) => Promise<
         Array<Pick<ParkingReservation, "id" | "start_time">>
     >;
-};
 
-// ─── Factory ─────────────────────────────────────────────────────────────────
+    getPendingCheckoutReservations: () => Promise<
+        Array<Pick<ParkingReservation, "id" | "end_time">>
+    >;
+};
 
 export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
@@ -157,6 +153,11 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
     // ── Reservations – queries ────────────────────────────────────────────────
 
+    const SELECT_FIELDS = `
+        id, user_id, start_time, end_time,
+        attendance_status, canceled_at, created_at, updated_at
+    `;
+
     const listReservations = async (
         query: ListReservationsQuery
     ): Promise<ListReservationsPage> => {
@@ -178,17 +179,16 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
             conditions.push("r.start_time < ?");
             params.push(query.end_time);
         }
+
         if (query.lifecycle_status) {
-            conditions.push("r.lifecycle_status = ?");
-            params.push(query.lifecycle_status);
+            const statuses = lifecycleToAttendanceStatuses(query.lifecycle_status);
+            conditions.push(`r.attendance_status IN (${statuses.map(() => "?").join(", ")})`);
+            params.push(...statuses);
         }
+
         if (query.attendance_status) {
             conditions.push("r.attendance_status = ?");
             params.push(query.attendance_status);
-        }
-        if (query.allocation_state) {
-            conditions.push("r.allocation_state = ?");
-            params.push(query.allocation_state);
         }
         if (decodedCursor) {
             conditions.push("r.id > ?");
@@ -200,10 +200,7 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         const hasLimit = query.limit !== undefined;
         const limit = query.limit;
         const sql = `
-            SELECT
-                r.id, r.user_id, r.start_time, r.end_time,
-                r.lifecycle_status, r.attendance_status, r.allocation_state,
-                r.canceled_at, r.created_at, r.updated_at
+            SELECT ${SELECT_FIELDS}
             FROM parking_reservations r
             ${where}
             ORDER BY r.id ASC
@@ -213,13 +210,11 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
         const { rows } = await db.query(sql, queryParams);
 
-        const items = rows as ParkingReservation[];
+        const items = (rows as ReservationRow[]).map(hydrateReservation);
         const hasMore = hasLimit ? items.length > (limit as number) : false;
         const pageItems = hasLimit && hasMore ? items.slice(0, limit as number) : items;
         const nextCursor = hasLimit && hasMore && pageItems.length > 0
-            ? Cursor.encode({
-                lastId: pageItems[pageItems.length - 1].id,
-            })
+            ? Cursor.encode({ lastId: pageItems[pageItems.length - 1].id })
             : null;
 
         return { items: pageItems, nextCursor };
@@ -227,26 +222,18 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
     const getReservationById = async (id: number): Promise<ParkingReservation | null> => {
         const { rows } = await db.query(
-            `SELECT
-                id, user_id, start_time, end_time,
-                lifecycle_status, attendance_status, allocation_state,
-                canceled_at, created_at, updated_at
-             FROM parking_reservations WHERE id = ?`,
+            `SELECT ${SELECT_FIELDS} FROM parking_reservations WHERE id = ?`,
             [id]
         );
-        return rows.length ? (rows[0] as ParkingReservation) : null;
+        return rows.length ? hydrateReservation(rows[0] as ReservationRow) : null;
     };
 
     const getReservationsByUser = async (userId: string): Promise<ParkingReservation[]> => {
         const { rows } = await db.query(
-            `SELECT
-                id, user_id, start_time, end_time,
-                lifecycle_status, attendance_status, allocation_state,
-                canceled_at, created_at, updated_at
-             FROM parking_reservations WHERE user_id = ?`,
+            `SELECT ${SELECT_FIELDS} FROM parking_reservations WHERE user_id = ?`,
             [userId]
         );
-        return rows as ParkingReservation[];
+        return (rows as ReservationRow[]).map(hydrateReservation);
     };
 
     const getReservationByIdAndUser = async (
@@ -254,15 +241,12 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         userId: string
     ): Promise<ParkingReservation | null> => {
         const { rows } = await db.query(
-            `SELECT
-                id, user_id, start_time, end_time,
-                lifecycle_status, attendance_status, allocation_state,
-                canceled_at, created_at, updated_at
+            `SELECT ${SELECT_FIELDS}
              FROM parking_reservations
              WHERE id = ? AND user_id = ?`,
             [id, userId]
         );
-        return rows.length ? (rows[0] as ParkingReservation) : null;
+        return rows.length ? hydrateReservation(rows[0] as ReservationRow) : null;
     };
 
     const hasActiveReservation = async (
@@ -288,7 +272,7 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         endTime: Date
     ): Promise<OverlapRow[]> => {
         const { rows } = await db.query(
-            `SELECT id, user_id, created_at, allocation_state, lifecycle_status, attendance_status
+            `SELECT id, user_id, created_at, attendance_status
              FROM parking_reservations
              WHERE id != ?
                AND start_time < ?
@@ -297,7 +281,10 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
              ORDER BY created_at ASC`,
             [reservationId, endTime, startTime]
         );
-        return rows as OverlapRow[];
+        return (rows as Omit<OverlapRow, "lifecycle_status">[]).map(r => ({
+            ...r,
+            lifecycle_status: inferLifecycleStatus(r.attendance_status),
+        }));
     };
 
     const getReservationCountInWindow = async (
@@ -324,23 +311,19 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
     ): Promise<ParkingReservation | null> => {
         const { insertId } = await db.execute(
             `INSERT INTO parking_reservations
-                (user_id, start_time, end_time, lifecycle_status, attendance_status, allocation_state)
-             VALUES (?, ?, ?, 'ACTIVE', 'NOT_ARRIVED', 'SOFT')`,
+                (user_id, start_time, end_time, attendance_status)
+             VALUES (?, ?, ?, 'NOT_ARRIVED')`,
             [userId, startTime, endTime]
         );
         if (!insertId) return null;
         return getReservationById(insertId);
     };
 
-    const cancelReservation = async (
-        id: number,
-        freeze: boolean,
-    ): Promise<ParkingReservation | null> => {
-        const freezeClause = freeze ? `, allocation_state = 'FROZEN'` : "";
-
+    const cancelReservation = async (id: number): Promise<ParkingReservation | null> => {
         const { affectedCount } = await db.execute(
             `UPDATE parking_reservations
-             SET lifecycle_status = 'CANCELED', canceled_at = NOW() ${freezeClause}
+             SET attendance_status = 'CANCELED',
+                 canceled_at       = NOW()
              WHERE id = ?`,
             [id]
         );
@@ -350,14 +333,11 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
 
     const updateAttendanceStatus = async (
         id: number,
-        attendanceStatus: string,
-        freeze = false,
+        attendanceStatus: AttendanceStatus,
     ): Promise<ParkingReservation | null> => {
-        const freezeClause = freeze ? `, allocation_state = 'FROZEN'` : "";
-
         const { affectedCount } = await db.execute(
             `UPDATE parking_reservations
-             SET attendance_status = ? ${freezeClause}
+             SET attendance_status = ?
              WHERE id = ?`,
             [attendanceStatus, id]
         );
@@ -368,10 +348,8 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
     const markNoShowExpired = async (checkinToleranceMinutes: number): Promise<number> => {
         const { affectedCount } = await db.execute(
             `UPDATE parking_reservations
-             SET attendance_status = 'NO_SHOW',
-                 allocation_state  = 'FROZEN'
-             WHERE lifecycle_status  = 'ACTIVE'
-               AND attendance_status = 'NOT_ARRIVED'
+             SET attendance_status = 'NO_SHOW'
+             WHERE attendance_status = 'NOT_ARRIVED'
                AND NOW() >= DATE_ADD(start_time, INTERVAL ? MINUTE)`,
             [checkinToleranceMinutes]
         );
@@ -384,14 +362,12 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         | { marked: true; reservation: ParkingReservation }
         | { marked: false; reason: string }
     > => {
-        // UPDATE condicional — solo actúa si aún está en NOT_ARRIVED + ACTIVE.
-        // Esto previene race conditions con check-ins manuales concurrentes.
+        // UPDATE condicional — solo actúa si aún está en NOT_ARRIVED.
+        // Previene race conditions con check-ins manuales concurrentes.
         const { affectedCount } = await db.execute(
             `UPDATE parking_reservations
-             SET attendance_status = 'NO_SHOW',
-                 allocation_state  = 'FROZEN'
+             SET attendance_status = 'NO_SHOW'
              WHERE id               = ?
-               AND lifecycle_status  = 'ACTIVE'
                AND attendance_status = 'NOT_ARRIVED'`,
             [reservationId]
         );
@@ -401,7 +377,7 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
             if (!existing) return { marked: false, reason: "Reservación no encontrada" };
             return {
                 marked: false,
-                reason: `Estado actual: lifecycle=${existing.lifecycle_status}, attendance=${existing.attendance_status}`,
+                reason: `Estado actual: attendance=${existing.attendance_status}`,
             };
         }
 
@@ -411,19 +387,81 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         return { marked: true, reservation: updated };
     };
 
+    const markCheckoutForReservation = async (
+        reservationId: number
+    ): Promise<
+        | { action: "checked_out" | "no_show_fallback"; reservation: ParkingReservation }
+        | { action: "skipped"; reason: string }
+    > => {
+        // Caso principal: el usuario hizo check-in y olvidó finalizar.
+        // Clampeamos updated_at a end_time: refleja cuándo debió ocurrir el checkout,
+        // no cuándo lo ejecutó el worker (que puede llegar tarde tras un restart).
+        const checkoutResult = await db.execute(
+            `UPDATE parking_reservations
+             SET attendance_status = 'CHECKED_OUT',
+                 updated_at        = end_time
+             WHERE id               = ?
+               AND attendance_status = 'CHECKED_IN'`,
+            [reservationId]
+        );
+
+        if (checkoutResult.affectedCount > 0) {
+            const updated = await getReservationById(reservationId);
+            if (!updated) return { action: "skipped", reason: "No se pudo releer la reservación tras el checkout" };
+            return { action: "checked_out", reservation: updated };
+        }
+
+        // Fallback defensivo: el job de no-show debió haberlo resuelto, pero por
+        // alguna razón (restart, falla) el usuario sigue en NOT_ARRIVED a end_time.
+        const noShowResult = await db.execute(
+            `UPDATE parking_reservations
+             SET attendance_status = 'NO_SHOW',
+                 updated_at        = end_time
+             WHERE id               = ?
+               AND attendance_status = 'NOT_ARRIVED'`,
+            [reservationId]
+        );
+
+        if (noShowResult.affectedCount > 0) {
+            const updated = await getReservationById(reservationId);
+            if (!updated) return { action: "skipped", reason: "No se pudo releer la reservación tras el no-show fallback" };
+            return { action: "no_show_fallback", reservation: updated };
+        }
+
+        // Ya estaba en un estado terminal (CHECKED_OUT, NO_SHOW, CANCELED): no-op.
+        const existing = await getReservationById(reservationId);
+        return {
+            action: "skipped",
+            reason: existing
+                ? `Ya en estado terminal: ${existing.attendance_status}`
+                : "Reservación no encontrada",
+        };
+    };
+
     const getPendingNoShowReservations = async (
         checkinToleranceMinutes: number
     ): Promise<Array<Pick<ParkingReservation, "id" | "start_time">>> => {
-        // Reservaciones que aún no han pasado el trigger time
         const { rows } = await db.query(
             `SELECT id, start_time
              FROM parking_reservations
-             WHERE lifecycle_status  = 'ACTIVE'
-               AND attendance_status = 'NOT_ARRIVED'
+             WHERE attendance_status = 'NOT_ARRIVED'
                AND DATE_ADD(start_time, INTERVAL ? MINUTE) > NOW()`,
             [checkinToleranceMinutes]
         );
         return rows as Array<Pick<ParkingReservation, "id" | "start_time">>;
+    };
+
+    const getPendingCheckoutReservations = async (): Promise<
+        Array<Pick<ParkingReservation, "id" | "end_time">>
+    > => {
+        const { rows } = await db.query(
+            `SELECT id, end_time
+             FROM parking_reservations
+             WHERE attendance_status = 'CHECKED_IN'
+               AND end_time > NOW()`,
+            []
+        );
+        return rows as Array<Pick<ParkingReservation, "id" | "end_time">>;
     };
 
     return {
@@ -446,6 +484,8 @@ export function makeParkingSlotsRepo(db: Db): ParkingSlotsRepo {
         updateAttendanceStatus,
         markNoShowExpired,
         markNoShowForReservation,
+        markCheckoutForReservation,
         getPendingNoShowReservations,
+        getPendingCheckoutReservations,
     };
 }

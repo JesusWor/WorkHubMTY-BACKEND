@@ -1,14 +1,14 @@
 import { parkingQueue, CHECKIN_TOLERANCE_MINUTES_EXPORT } from "./parking-queue.js";
 import { ParkingSlotsRepo } from "../../modules/parking-slots/parking-slots.repo.js";
 
-/**
- * Al reiniciar el servidor, re-encola los delayed jobs de no-show que pudieron
- * haberse perdido si el proceso cayó antes de poder encolarlos.
- *
- * BullMQ deduplica automáticamente por jobId, así que llamar esto es seguro
- * aunque el job ya exista en Redis — simplemente lo ignora.
- */
-export async function reviveNoShowJobs(repo: ParkingSlotsRepo): Promise<void> {
+export async function reviveParkingJobs(repo: ParkingSlotsRepo): Promise<void> {
+    await Promise.all([
+        reviveNoShowJobs(repo),
+        reviveCheckoutJobs(repo),
+    ]);
+}
+
+async function reviveNoShowJobs(repo: ParkingSlotsRepo): Promise<void> {
     const pending = await repo.getPendingNoShowReservations(CHECKIN_TOLERANCE_MINUTES_EXPORT);
 
     if (pending.length === 0) {
@@ -28,12 +28,39 @@ export async function reviveNoShowJobs(repo: ParkingSlotsRepo): Promise<void> {
                 { reservationId: id },
                 {
                     delay,
-                    jobId: `no-show:${id}`,
-                    // BullMQ ignora el add si el jobId ya existe en la queue
+                    jobId: `noshow-${id}`,
                 }
             );
         })
     );
 
     console.log(`[revival] ${pending.length} jobs de no-show re-encolados`);
+}
+
+async function reviveCheckoutJobs(repo: ParkingSlotsRepo): Promise<void> {
+    const pending = await repo.getPendingCheckoutReservations();
+
+    if (pending.length === 0) {
+        console.log("[revival] No hay jobs de auto-checkout pendientes por re-encolar");
+        return;
+    }
+
+    console.log(`[revival] Re-encolando ${pending.length} jobs de auto-checkout...`);
+
+    await Promise.all(
+        pending.map(({ id, end_time }) => {
+            const delay = Math.max(0, new Date(end_time).getTime() - Date.now());
+
+            return parkingQueue.add(
+                "auto-checkout",
+                { reservationId: id },
+                {
+                    delay,
+                    jobId: `checkout-${id}`,
+                }
+            );
+        })
+    );
+
+    console.log(`[revival] ${pending.length} jobs de auto-checkout re-encolados`);
 }

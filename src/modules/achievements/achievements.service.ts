@@ -8,6 +8,7 @@ export type AchievementsService = {
     getById: (id: number) => Promise<Achievements | null>;
     createAchievement: (input: CreateAchievementInput) => Promise<{ id: number }>;
     updateAchievements: (userId: string, achievementId: number, increment: number) => Promise<void>;
+    addProgress: (userId: string, achievementId: number, increment: number) => Promise<void>;
     getRanking: (userId: string) => Promise<any[]>;
     getUserAchievements: (userId: string) => Promise<AchievementUserData[]>;
     getCompletedByUser: (userId: string) => Promise<any[]>;
@@ -45,6 +46,14 @@ export function makeAchievementsService(repo: AchievementsRepo, userRepo: UserRe
         if (increment <= 0) throw new BadRequestError("The increment has to be more than 0");
 
         await repo.updateAchievements(userId, achievementId, increment);
+    };
+
+    const addProgress = async (
+        userId: string,
+        achievementId: number,
+        increment: number
+    ): Promise<void> => {
+        await updateAchievements(userId, achievementId, increment);
     };
 
     const getRanking = async (userId: string): Promise<any[]> => {
@@ -94,6 +103,7 @@ export function makeAchievementsService(repo: AchievementsRepo, userRepo: UserRe
         getById,
         createAchievement,
         updateAchievements,
+        addProgress,
         getRanking,
         getUserAchievements,
         getCompletedByUser,

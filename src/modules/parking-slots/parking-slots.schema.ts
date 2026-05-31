@@ -10,24 +10,31 @@ const CsvArraySchema = <T extends z.ZodTypeAny>(schema: T) =>
         return z.array(schema).parse(values);
     });
 
-/**
- * Define existencia lógica (cancelación temprana).
- */
-export const LifecycleStatusSchema = z.enum(["ACTIVE", "CANCELED"]);
+export const AttendanceStatusSchema = z.enum([
+    "NOT_ARRIVED",
+    "CHECKED_IN",
+    "CHECKED_OUT",
+    "NO_SHOW",
+    "CANCELED",
+]);
 
-/**
- * Define resultado operativo (asistencia).
- */
-export const AttendanceStatusSchema = z.enum(["NOT_ARRIVED", "CHECKED_IN", "CHECKED_OUT", "NO_SHOW"]);
+export const LifecycleStatusSchema = z.enum(["ACTIVE", "CANCELED", "FINALIZED"]);
 
-/**
- * Define si la asignación puede seguir mutando (no queremos que mute a partir de cierto punto, pero sí queremos que mutee antes de ese punto).
- */
-export const AllocationStateSchema = z.enum(["SOFT", "FROZEN"]);
-
-export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
 export type AttendanceStatus = z.infer<typeof AttendanceStatusSchema>;
-export type AllocationState = z.infer<typeof AllocationStateSchema>;
+export type LifecycleStatus = z.infer<typeof LifecycleStatusSchema>;
+
+export function inferLifecycleStatus(attendance: AttendanceStatus): LifecycleStatus {
+    switch (attendance) {
+        case "NOT_ARRIVED":
+        case "CHECKED_IN":
+            return "ACTIVE";
+        case "CANCELED":
+            return "CANCELED";
+        case "CHECKED_OUT":
+        case "NO_SHOW":
+            return "FINALIZED";
+    }
+}
 
 // Parking Lots
 
@@ -55,12 +62,11 @@ export const ParkingReservationSchema = z.object({
     user_id: z.string().min(1, "El user_id es requerido").max(8, "El user_id no puede superar 8 caracteres"),
     start_time: z.coerce.date(),
     end_time: z.coerce.date(),
-    lifecycle_status: LifecycleStatusSchema,
+    lifecycle_status: LifecycleStatusSchema,   // inferido por el repo
     attendance_status: AttendanceStatusSchema,
-    allocation_state: AllocationStateSchema,
-    canceled_at: z.coerce.date().optional(),
+    canceled_at: z.coerce.date().nullable(),
     created_at: z.coerce.date(),
-    updated_at: z.coerce.date()
+    updated_at: z.coerce.date(),
 }).refine(data => data.end_time.getTime() > data.start_time.getTime(), {
     message: "end_time debe ser posterior a start_time",
     path: ["end_time"],
@@ -90,7 +96,6 @@ export const ListReservationsQuerySchema = z
         end_time: z.coerce.date().optional(),
         lifecycle_status: LifecycleStatusSchema.optional(),
         attendance_status: AttendanceStatusSchema.optional(),
-        allocation_state: AllocationStateSchema.optional(),
         include: CsvArraySchema(QueryIncludeSchema).optional().default([]),
         limit: z.coerce.number().int().optional(),
         cursor: z.string().nullable().optional().default(null),
@@ -100,12 +105,10 @@ export const ListReservationsQuerySchema = z
             return data.end_time.getTime() > data.start_time.getTime();
         }
         return true;
-    },
-        {
-            message: "end_time debe ser posterior a start_time",
-            path: ["end_time"]
-        }
-    );
+    }, {
+        message: "end_time debe ser posterior a start_time",
+        path: ["end_time"],
+    });
 
 export type ListReservationsQuery = z.infer<typeof ListReservationsQuerySchema>;
 
@@ -133,12 +136,11 @@ export const ReservationDetailResponseSchema = z.object({
 export type ReservationDetailResponse = z.infer<typeof ReservationDetailResponseSchema>;
 
 // GET /parking/reservations/buckets
-export const StepMinutesSchema = z.enum(["15", "30", "60"]);
+export const StepMinutesSchema = z.enum(["5", "10", "15", "20", "30", "60"]);
 
 export const ReservationBucketsQuerySchema = z.object({
     start_time: z.coerce.date(),
     end_time: z.coerce.date(),
-
     step_minutes: StepMinutesSchema.default("15"),
 }).refine(data => data.end_time.getTime() > data.start_time.getTime(), {
     message: "start_time must be before end_time",
@@ -148,23 +150,21 @@ export const ReservationBucketsQuerySchema = z.object({
 export const ReservationBucketSchema = z.object({
     timestamp: z.coerce.date(),
     reservation_count: z.number().int().min(0),
-})
+});
 
 export const ReservationBucketsResponseSchema = z.object({
     buckets: z.array(ReservationBucketSchema),
-})
+});
 
 export type ReservationBucketsQuery = z.infer<typeof ReservationBucketsQuerySchema>;
 export type ReservationBucket = z.infer<typeof ReservationBucketSchema>;
 export type ReservationBucketsResponse = z.infer<typeof ReservationBucketsResponseSchema>;
 
-// PATCH /parking/reservations/:id/attendance
 export const PatchAttendanceSchema = z.object({
     attendance_status: AttendanceStatusSchema,
 });
 
 export type PatchAttendance = z.infer<typeof PatchAttendanceSchema>;
-
 
 export const ReservationIdParamSchema = z.object({
     id: z.coerce.number().int().positive(),

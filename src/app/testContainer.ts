@@ -5,7 +5,13 @@ import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } fro
 import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from '../modules/user/index.js';
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
-import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from '../modules/achievements/index.js';
+import {
+  makeAchievementsRepo,
+  makeAchievementsService,
+  makeAchievementsController,
+  makeAchievementsRouter,
+  initAchievementsListeners,
+} from '../modules/achievements/index.js';
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
@@ -14,7 +20,7 @@ import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter }
 
 import { parkingQueue } from "../infra/queue/parking-queue.js";
 import { parkingEvents } from "../infra/events/parking-events.emitter.js";
-import { initParkingBroadcaster } from "../infra/events/parking-events.broadcaster.js";
+import { initParkingBroadcaster } from "../infra/websocket/broadcasters/parking-events.broadcaster.js";
 import { createParkingWorker } from "../infra/queue/parking-worker.js";
 
 /**
@@ -69,6 +75,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   const achievementsService = makeAchievementsService(achievementsRepo, userRepo);
   const achievementsController = makeAchievementsController(achievementsService);
   const achievementsRouter = makeAchievementsRouter(achievementsController);
+  initAchievementsListeners(achievementsService);
 
   const userStatusService = makeUserStatusService();
   const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
@@ -108,6 +115,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   // Worker BullMQ: procesa los delayed jobs de no-show
   const parkingWorker = createParkingWorker({
     markNoShowForReservation: (id) => parkingSlotsRepo.markNoShowForReservation(id),
+    markCheckoutForReservation: (id) => parkingSlotsRepo.markCheckoutForReservation(id),
   });
 
   const reportsRepo = makeReportsRepo(db);
@@ -128,6 +136,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     notificationRouter,
     friendshipRouter,
     achievementsRouter,
+    achievementsService,
     officeSlotsRouter,
     reservablesRouter,
     reservationsRouter,
@@ -138,6 +147,8 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
     parkingWorker,
     reportsRouter,
     teamsRouter,
+    userService,
+    teamsService,
     userStatusService,
     fakeAuthenticate,
   };

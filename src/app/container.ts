@@ -4,15 +4,21 @@ import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } fro
 import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from "../modules/user/index.js";
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
-import { makeAchievementsRepo, makeAchievementsService, makeAchievementsController, makeAchievementsRouter } from "../modules/achievements/index.js";
+import {
+    makeAchievementsRepo,
+    makeAchievementsService,
+    makeAchievementsController,
+    makeAchievementsRouter,
+    initAchievementsListeners,
+} from "../modules/achievements/index.js";
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
 import { parkingQueue } from "../infra/queue/parking-queue.js";
 import { parkingEvents } from "../infra/events/parking-events.emitter.js";
-import { initParkingBroadcaster } from "../infra/events/parking-events.broadcaster.js";
+import { initParkingBroadcaster, initTeamBroadcaster, initUserBroadcaster } from "../infra/websocket/index.js";
 import { createParkingWorker } from "../infra/queue/parking-worker.js";
-import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter} from "../modules/teams/index.js";
+import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 export function buildContainer() {
     const db = createDb();
     db.testConnection();
@@ -21,19 +27,20 @@ export function buildContainer() {
     const roleService = makeRoleService(roleRepo);
     const roleController = makeRoleController(roleService);
     const roleRouter = makeRoleRouter(roleController);
-    
+
     const friendshipRepo = makeFriendshipRepo(db);
     const friendshipService = makeFriendshipService(friendshipRepo);
     const friendshipController = makeFriendshipController(friendshipService);
     const friendshipRouter = makeFriendshipRouter(friendshipController);
-    
+
     const userRepo = makeUserRepo(db);
 
     const achievementsRepo = makeAchievementsRepo(db);
-    const achievementsService = makeAchievementsService(achievementsRepo,userRepo);
+    const achievementsService = makeAchievementsService(achievementsRepo, userRepo);
     const achievementsController = makeAchievementsController(achievementsService);
     const achievementsRouter = makeAchievementsRouter(achievementsController);
-    
+    initAchievementsListeners(achievementsService);
+
     const userStatusService = makeUserStatusService();
     const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
     const userController = makeUserController(userService);
@@ -70,10 +77,13 @@ export function buildContainer() {
 
     // Broadcaster: escucha eventos del emitter y los manda por WebSocket
     initParkingBroadcaster();
+    initTeamBroadcaster();
+    initUserBroadcaster();
 
     // Worker BullMQ: procesa los delayed jobs de no-show
     const parkingWorker = createParkingWorker({
         markNoShowForReservation: (id) => parkingSlotsRepo.markNoShowForReservation(id),
+        markCheckoutForReservation: (id) => parkingSlotsRepo.markCheckoutForReservation(id),
     });
 
     const reportsRepo = makeReportsRepo(db);
@@ -89,11 +99,13 @@ export function buildContainer() {
     return {
         roleRouter,
         userRouter,
+        userService,
         userStatusService,
         notificationRouter,
         authRouter,
         friendshipRouter,
         achievementsRouter,
+        achievementsService,
         officeSlotsRouter,
         reservablesRouter,
         reservationsRouter,
@@ -103,6 +115,7 @@ export function buildContainer() {
         parkingSlotsRouter,
         parkingSlotsRepo,
         parkingWorker,
-        reportsRouter
+        reportsRouter,
+        teamsService,
     };
 };

@@ -21,22 +21,20 @@ import {
 import { JwtPayload } from "../../shared/schemas/auth.schema.js";
 import { Roles } from "../../middleware/index.js";
 import { Queue } from "bullmq";
-import { NoShowJobData } from "../../infra/queue/parking-queue.js";
+import { NoShowJobData, CheckoutJobData } from "../../infra/queue/parking-queue.js";
 import { ParkingEventsEmitter } from "../../infra/events/parking-events.emitter.js";
 
-const GRACE_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 horas
 const CHECKIN_TOLERANCE_MINUTES = 30;
+
 const ATTENDANCE_TRANSITIONS: Record<AttendanceStatus, AttendanceStatus[]> = {
     NOT_ARRIVED: ["CHECKED_IN", "NO_SHOW"],
     CHECKED_IN: ["CHECKED_OUT"],
     CHECKED_OUT: [],
     NO_SHOW: [],
+    CANCELED: [],
 };
 
-/**
- * No se puede cancelar una reserva en estos estados (evita corrupción histórica).
- */
-const POST_OPERATIVE_STATUSES: AttendanceStatus[] = ["CHECKED_IN", "CHECKED_OUT"];
+const NON_CANCELABLE_STATUSES: AttendanceStatus[] = ["CHECKED_IN", "CHECKED_OUT", "NO_SHOW"];
 
 function assertValidAttendanceTransition(
     current: AttendanceStatus,
@@ -68,9 +66,8 @@ async function computeProjection(
             id: reservation.id,
             user_id: reservation.user_id,
             created_at: reservation.created_at,
-            allocation_state: reservation.allocation_state,
-            lifecycle_status: reservation.lifecycle_status,
             attendance_status: reservation.attendance_status,
+            lifecycle_status: reservation.lifecycle_status,
         },
     ].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -104,7 +101,11 @@ async function computeProjection(
 // ─── Helpers de queue ─────────────────────────────────────────────────────────
 
 function noShowJobId(reservationId: number): string {
-    return `no-show:${reservationId}`;
+    return `noshow-${reservationId}`;
+}
+
+function checkoutJobId(reservationId: number): string {
+    return `checkout-${reservationId}`;
 }
 
 function noShowDelay(startTime: Date): number {
@@ -112,12 +113,16 @@ function noShowDelay(startTime: Date): number {
     return Math.max(0, triggerAt - Date.now());
 }
 
+function checkoutDelay(endTime: Date): number {
+    return Math.max(0, endTime.getTime() - Date.now());
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ParkingSlotsServiceDeps = {
     repo: ParkingSlotsRepo;
     friendshipService: FriendshipService;
-    queue: Queue<NoShowJobData>;
+    queue: Queue<NoShowJobData | CheckoutJobData>;
     emitter: ParkingEventsEmitter;
 };
 
@@ -198,7 +203,6 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         if (query.limit !== undefined) {
             assertValidReservationsLimit(query.limit);
         }
-
         return repo.listReservations(query);
     };
 
@@ -276,15 +280,33 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         );
         if (!reservation) throw new ConflictError("No fue posible crear la reservación");
 
-        // Encolar el delayed job de no-show
-        await queue.add(
-            "no-show",
-            { reservationId: reservation.id },
-            {
-                delay: noShowDelay(reservation.start_time),
-                jobId: noShowJobId(reservation.id),
-            }
-        );
+        try {
+            await queue.add(
+                "no-show",
+                { reservationId: reservation.id },
+                {
+                    delay: noShowDelay(reservation.start_time),
+                    jobId: noShowJobId(reservation.id),
+                }
+            );
+            console.log(`[queue] no-show encolado para reservación ${reservation.id}`);
+        } catch (err) {
+            console.error("[queue] Error al encolar no-show:", (err as Error).message);
+        }
+
+        try {
+            await queue.add(
+                "auto-checkout",
+                { reservationId: reservation.id },
+                {
+                    delay: checkoutDelay(reservation.end_time),
+                    jobId: checkoutJobId(reservation.id),
+                }
+            );
+            console.log(`[queue] auto-checkout encolado para reservación ${reservation.id}`);
+        } catch (err) {
+            console.error("[queue] Error al encolar auto-checkout:", (err as Error).message);
+        }
 
         emitter.emit("reservation.created", reservation);
         return reservation;
@@ -305,7 +327,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             throw new NotFoundError(`La reservación ${id} no existe o no te pertenece`);
         }
 
-        if (reservation.lifecycle_status === "CANCELED") {
+        if (reservation.attendance_status === "CANCELED") {
             throw new ConflictError(
                 "No se puede modificar la asistencia de una reservación cancelada"
             );
@@ -313,32 +335,18 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
 
         assertValidAttendanceTransition(reservation.attendance_status, next);
 
-        // CHECKED_IN siempre congela: el usuario ya ocupó el slot físicamente.
-        // También cancela el job de no-show porque ya no aplica.
-        if (next === "CHECKED_IN") {
-            const updated = await repo.updateAttendanceStatus(id, next, true /* freeze */);
-            if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
-            await queue.remove(noShowJobId(id));
-            emitter.emit("reservation.attendance_updated", updated);
-            return updated;
-        }
-
-        // NO_SHOW manual: congela si estamos dentro del gracePeriod
-        if (next === "NO_SHOW") {
-            const now = Date.now();
-            const startMs = new Date(reservation.start_time).getTime();
-            const withinGrace = now >= startMs - GRACE_PERIOD_MS;
-            const updated = await repo.updateAttendanceStatus(id, next, withinGrace);
-            if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
-            // El job ya no debe ejecutarse si el no-show fue manual
-            await queue.remove(noShowJobId(id));
-            emitter.emit("reservation.attendance_updated", updated);
-            return updated;
-        }
-
-        // CHECKED_OUT: no cambia allocation_state (ya estaba FROZEN por CHECKED_IN)
-        const updated = await repo.updateAttendanceStatus(id, next, false);
+        const updated = await repo.updateAttendanceStatus(id, next);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+
+        if (next === "CHECKED_IN") {
+            await queue.remove(noShowJobId(id));
+        }
+
+        if (next === "CHECKED_OUT" || next === "NO_SHOW") {
+            await queue.remove(noShowJobId(id));
+            await queue.remove(checkoutJobId(id));
+        }
+
         emitter.emit("reservation.attendance_updated", updated);
         return updated;
     };
@@ -357,27 +365,22 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             throw new NotFoundError(`La reservación ${id} no existe o no te pertenece`);
         }
 
-        if (reservation.lifecycle_status === "CANCELED") {
+        if (reservation.attendance_status === "CANCELED") {
             throw new ConflictError("La reservación ya está cancelada");
         }
 
-        // Bloquear cancelaciones post-operativas
-        if (POST_OPERATIVE_STATUSES.includes(reservation.attendance_status)) {
+        if (NON_CANCELABLE_STATUSES.includes(reservation.attendance_status)) {
             throw new ConflictError(
-                `No se puede cancelar una reservación con estado de asistencia '${reservation.attendance_status}'. ` +
+                `No se puede cancelar una reservación con estado '${reservation.attendance_status}'. ` +
                 `La reservación ya fue consumida operativamente.`
             );
         }
 
-        const now = Date.now();
-        const startMs = new Date(reservation.start_time).getTime();
-        const withinGrace = now >= startMs - GRACE_PERIOD_MS;
-
-        const updated = await repo.cancelReservation(id, withinGrace);
+        const updated = await repo.cancelReservation(id);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        // Cancelar el job pendiente de no-show
         await queue.remove(noShowJobId(id));
+        await queue.remove(checkoutJobId(id));
 
         emitter.emit("reservation.canceled", updated);
         return updated;
