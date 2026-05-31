@@ -60,6 +60,7 @@ async function resolveExcludedIds(
     if (exclude.includes("friends")) {
         tasks.push(friendshipService.getFriendIds(authEId));
     }
+    // ESTO, CAMBIARLO PORQUE AHORA SENT REQUESTS ACEPTA MAS DE UN ID
     if (exclude.includes("sent_requests")) {
         tasks.push(friendshipService.getSentRequests(authEId).then((requests) => requests.map((request) => request.toUser)));
     }

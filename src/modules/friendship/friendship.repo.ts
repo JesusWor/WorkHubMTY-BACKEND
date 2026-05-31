@@ -1,5 +1,5 @@
 import { Db } from "../../infra/db/db.js";
-import { Friendship, FriendRequest, Source, FriendRequests } from "./friendship.schema.js";
+import { Friendship, FriendRequest, Source, FriendRequests, SentFriendRequest } from "./friendship.schema.js";
 
 export type FriendshipRepo = {
     // Friendships
@@ -12,7 +12,7 @@ export type FriendshipRepo = {
 
     // Requests
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
-    getSentRequests: (eId: string) => Promise<FriendRequest[]>;
+    getSentRequests: (eId: string) => Promise<SentFriendRequest[]>;
     createRequest: (fromUser: string, toUserIds: string[], message?: string | undefined) => Promise<FriendRequests | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<boolean>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
@@ -105,19 +105,21 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
         return rows as FriendRequest[];
     };
 
-    const getSentRequests = async (eId: string): Promise<FriendRequest[]> => {
+    const getSentRequests = async (eId: string): Promise<SentFriendRequest[]>=> {
         const { rows } = await db.query(`
             SELECT
-                id,
-                from_user AS fromUser,
-                to_user AS toUser,
-                status,
-                create_time AS createdAt,
-                resolved_at AS resolvedAt
-            FROM friend_requests
+                fr.id,
+                fr.to_user AS eId,
+                u.name,
+                u.email,
+                fr.status,
+                fr.create_time AS createdAt,
+                fr.resolved_at AS resolvedAt
+            FROM friend_requests fr
+            JOIN users u ON fr.to_user = u.e_id
             WHERE from_user = ? AND status = 'PENDING'
         `, [eId]);
-        return rows as FriendRequest[];
+        return rows as SentFriendRequest[];
     };
 
     const createRequest = async (

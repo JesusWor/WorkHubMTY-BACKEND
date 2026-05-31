@@ -1,5 +1,5 @@
 import { FriendshipRepo } from "./friendship.repo.js";
-import { Friendship, FriendRequest, Source, FriendRequests } from "./friendship.schema.js";
+import { Friendship, FriendRequest, Source, FriendRequests, SentFriendRequest } from "./friendship.schema.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type FriendshipService = {
@@ -10,7 +10,7 @@ export type FriendshipService = {
     removeFriendship: (user1: string, user2: string) => Promise<boolean>;
 
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
-    getSentRequests: (eId: string) => Promise<FriendRequest[]>;
+    getSentRequests: (eId: string) => Promise<SentFriendRequest[]>;
     createRequest: (fromUser: string, toUserIds: string[], message?:string | undefined) => Promise<FriendRequests | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<Friendship | null>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
@@ -62,9 +62,10 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         return await repo.getReceivedRequests(eId);
     };
 
-    const getSentRequests = async (eId: string): Promise<FriendRequest[]> => {
+    const getSentRequests = async (eId: string): Promise<SentFriendRequest[]> => {
         if (!eId) throw new BadRequestError("User id is required");
-        return await repo.getSentRequests(eId);
+
+        return await repo.getSentRequests(eId)
     };
 
     const createRequest = async (fromUser: string, toUserIds: string[], message?:string| undefined): Promise<FriendRequests | null> => {
