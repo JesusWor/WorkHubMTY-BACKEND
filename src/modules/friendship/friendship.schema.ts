@@ -16,23 +16,37 @@ export const FriendshipSchema = z.object({
 export const FriendRequestSchema = z.object({
     id: z.number(),
     fromUser: z.string(),
-    toUser: z.string(),
+    toUserIds: z.array(z.string()),
     status: RequestStatusEnum,
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
 });
 
+export const SentFriendRequestSchema = z.object({
+    id: z.number(),
+    eId:z.string(),
+    name:z.string(),
+    email:z.email(),
+    status: RequestStatusEnum,
+    createdAt: z.string(),
+    resolvedAt: z.string().nullable(),
+})
+
+export const FriendRequestsSchema = z.array(FriendRequestSchema)
+
+
 export const CreateFriendRequestSchema = z.object({
-    toUser: z.string()
+    toUserIds: z.array(z.string()),
+    message: z.string().optional()
 });
 
 export const AcceptFriendRequestSchema = z.object({
     fromUser: z.string()
 });
 
-export const RemoveRelationSchema = z.object({
-    userId: z.string()
-});
+export const RemoveRelationSchema = z.string();
 
 export type Friendship = z.infer<typeof FriendshipSchema>;
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
+export type FriendRequests = z.infer<typeof FriendRequestsSchema>
+export type SentFriendRequest = z.infer<typeof SentFriendRequestSchema>

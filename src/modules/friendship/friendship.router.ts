@@ -11,14 +11,14 @@ export function makeFriendshipRouter(controller: FriendshipController): Router {
     router.get("/", authenticate, authorize({ allow: [Roles.ADMIN] }), asyncHandler(controller.getAll));
 
     router.post("/", authenticate, authorize({ allow: [Roles.ADMIN] }), asyncHandler(controller.createFriendship));
-    router.delete("/", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.removeFriendship));
+    router.delete("/:userId", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.removeFriendship));
 
     router.get("/requests/received", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.getReceivedRequests));
     router.get("/requests/sent", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.getSentRequests));
 
     router.post("/requests", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.createRequest));
     router.post("/requests/received", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.acceptRequest));
-    router.delete("/requests/sent", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.cancelRequest));
+    router.delete("/requests/sent/:userId", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.cancelRequest));
     router.delete("/requests/received", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.rejectRequest));
 
     return router;

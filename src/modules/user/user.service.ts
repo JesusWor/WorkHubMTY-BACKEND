@@ -21,6 +21,7 @@ export type UserService = {
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
     getUsers: (query: ListUsersQuery, authEId: string) => Promise<ListUsersPage>;
+    getPotentialFriends: (userId: string, query?: string) => Promise<User[]>;
 
     getUserFriends: (userId: string) => Promise<User[]>;
     getAllByName: (name: string) => Promise<User[]>;
@@ -59,6 +60,7 @@ async function resolveExcludedIds(
     if (exclude.includes("friends")) {
         tasks.push(friendshipService.getFriendIds(authEId));
     }
+    // ESTO, CAMBIARLO PORQUE AHORA SENT REQUESTS ACEPTA MAS DE UN ID
     if (exclude.includes("sent_requests")) {
         tasks.push(friendshipService.getSentRequests(authEId).then((requests) => requests.map((request) => request.toUser)));
     }
@@ -136,8 +138,13 @@ export function makeUserService(
         return {
             ...user,
             status,
-            friendCount: friends.length,
-            achievementCount: achievements.length,
+            stats:{
+                streak: 20,
+                friendCount: friends.length,
+                levelsPassed: achievements.length,
+                hoursInOffice: 100, // This would be calculated or fetched from somewhere
+                points:2300
+            }
         };
     };
 
@@ -150,7 +157,7 @@ export function makeUserService(
         );
 
         const page = await repo.listUsers({
-            name: query.name,
+            query: query.query,
             exclude: query.exclude,
             excludeId: excludedIds,
             limit: query.limit,
@@ -162,6 +169,11 @@ export function makeUserService(
             nextCursor: page.nextCursor,
         };
     };
+
+    const getPotentialFriends = async (userId: string, query?: string): Promise<User[]> => {
+        const users = await repo.getPotentialFriends(query, userId);
+        return enrichWithStatus(users, userStatusService);
+    }
 
     const getAllGuests = async (): Promise<Guest[]> => repo.getAllGuests();
 
@@ -210,6 +222,7 @@ export function makeUserService(
         getAllByName,
         getFullProfile,
         getUsers,
+        getPotentialFriends,
         getAllGuests,
         getGuestById,
         createGuest,

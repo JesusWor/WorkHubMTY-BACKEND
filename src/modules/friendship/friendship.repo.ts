@@ -1,5 +1,5 @@
 import { Db } from "../../infra/db/db.js";
-import { Friendship, FriendRequest, Source } from "./friendship.schema.js";
+import { Friendship, FriendRequest, Source, FriendRequests, SentFriendRequest } from "./friendship.schema.js";
 
 export type FriendshipRepo = {
     // Friendships
@@ -12,8 +12,8 @@ export type FriendshipRepo = {
 
     // Requests
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
-    getSentRequests: (eId: string) => Promise<FriendRequest[]>;
-    createRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
+    getSentRequests: (eId: string) => Promise<SentFriendRequest[]>;
+    createRequest: (fromUser: string, toUserIds: string[], message?: string | undefined) => Promise<FriendRequests | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<boolean>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
     rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
@@ -105,42 +105,74 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
         return rows as FriendRequest[];
     };
 
-    const getSentRequests = async (eId: string): Promise<FriendRequest[]> => {
+    const getSentRequests = async (eId: string): Promise<SentFriendRequest[]>=> {
         const { rows } = await db.query(`
             SELECT
-                id,
-                from_user AS fromUser,
-                to_user AS toUser,
-                status,
-                create_time AS createdAt,
-                resolved_at AS resolvedAt
-            FROM friend_requests
+                fr.id,
+                fr.to_user AS eId,
+                u.name,
+                u.email,
+                fr.status,
+                fr.create_time AS createdAt,
+                fr.resolved_at AS resolvedAt
+            FROM friend_requests fr
+            JOIN users u ON fr.to_user = u.e_id
             WHERE from_user = ? AND status = 'PENDING'
         `, [eId]);
-        return rows as FriendRequest[];
+        return rows as SentFriendRequest[];
     };
 
-    const createRequest = async (fromUser: string, toUser: string): Promise<FriendRequest | null> => {
-        const result = await db.query(`
-            INSERT IGNORE INTO friend_requests (from_user, to_user)
-            VALUES (?, ?)
-        `, [fromUser, toUser]);
+    const createRequest = async (
+        fromUser: string,
+        toUserIds: string[],
+        message?: string,
+    ): Promise<FriendRequest[]> => {
+        const uniqueToUserIds = [...new Set(toUserIds)].filter(
+            (id) => id && id !== fromUser,
+        );
 
-        if ((result.rows as any).affectedRows === 0) return null;
+        if (uniqueToUserIds.length === 0) return [];
 
-        const { rows } = await db.query(`
+        const values = uniqueToUserIds.flatMap((toUserId) => [
+            fromUser,
+            toUserId,
+            message ?? null,
+        ]);
+
+        const placeholders = uniqueToUserIds.map(() => "(?, ?, ?)").join(", ");
+
+        const result = await db.query(
+            `
+            INSERT IGNORE INTO friend_requests (from_user, to_user, message)
+            VALUES ${placeholders}
+            `,
+            values,
+        );
+
+        const affectedRows = (result.rows as any).affectedRows ?? 0;
+
+        if (affectedRows === 0) return [];
+
+        const { rows } = await db.query(
+            `
             SELECT
                 id,
                 from_user AS fromUser,
                 to_user AS toUser,
+                message,
                 status,
                 create_time AS createdAt,
                 resolved_at AS resolvedAt
             FROM friend_requests
-            WHERE id = LAST_INSERT_ID()
-        `);
+            WHERE from_user = ?
+                AND to_user IN (${uniqueToUserIds.map(() => "?").join(", ")})
+                AND status = 'pending'
+            ORDER BY create_time DESC
+            `,
+            [fromUser, ...uniqueToUserIds],
+        );
 
-        return rows.length > 0 ? (rows[0] as FriendRequest) : null;
+        return rows;
     };
 
     const acceptRequest = async (toUser: string, fromUser: string): Promise<boolean> => {

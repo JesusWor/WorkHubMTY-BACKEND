@@ -9,6 +9,7 @@ export type UserController = {
     getAll: (req: Request, res: Response) => Promise<void>;
     getById: (req: Request, res: Response) => Promise<void>;
     getUsers: (req: Request, res: Response) => Promise<void>;
+    getPotentialFriends: (req: Request, res: Response) => Promise<void>;
 
     getMyFriendships: (req: Request, res: Response) => Promise<void>;
     getUserFriendships: (req: Request, res: Response) => Promise<void>;
@@ -125,6 +126,14 @@ export function makeUserController(service: UserService): UserController {
         GlobalResponse.okWithCursor(res, users.items, users.nextCursor);
     };
 
+    const getPotentialFriends = async (req: Request, res: Response): Promise<void> => {
+        const auth = requireAuth(req, res);
+        if (!auth) return;
+        const query = req.query.query ? z.string().parse(req.query.query) : undefined;
+        const users = await service.getPotentialFriends(auth.authEId, query);
+        GlobalResponse.okWithData(res, users);
+    }
+
     const getAllGuests = async (_req: Request, res: Response): Promise<void> => {
         const guests = await service.getAllGuests();
         GlobalResponse.okWithData(res, guests);
@@ -200,6 +209,7 @@ export function makeUserController(service: UserService): UserController {
         getMyFullProfile,
         getUserFullProfile,
         getUsers,
+        getPotentialFriends,
         getAllGuests,
         getGuestById,
         createGuest,

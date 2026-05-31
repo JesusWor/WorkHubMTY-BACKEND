@@ -51,13 +51,13 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        const parsed = RemoveRelationSchema.safeParse(req.body);
+        const parsed = RemoveRelationSchema.safeParse(req.params.userId);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
 
-        await service.removeFriendship(req.user.eId, parsed.data.userId);
+        await service.removeFriendship(req.user.eId, parsed.data);
         GlobalResponse.ok(res, "Friendship removed");
     };
 
@@ -96,7 +96,7 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        const request = await service.createRequest(req.user.eId, parsed.data.toUser);
+        const request = await service.createRequest(req.user.eId, parsed.data.toUserIds, parsed.data.message);
         GlobalResponse.created(res, request);
     };
 
@@ -123,14 +123,14 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             GlobalResponse.unauthorized(res);
             return;
         }
-
-        const parsed = RemoveRelationSchema.safeParse(req.body);
+        console.log(req.params.userId)
+        const parsed = RemoveRelationSchema.safeParse(req.params.userId);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
 
-        await service.cancelRequest(req.user.eId, parsed.data.userId);
+        await service.cancelRequest(req.user.eId, parsed.data);
         GlobalResponse.ok(res, "Friend request cancelled");
     };
 
@@ -147,7 +147,7 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        await service.rejectRequest(req.user.eId, parsed.data.userId);
+        await service.rejectRequest(req.user.eId, parsed.data);
         GlobalResponse.ok(res, "Friend request rejected");
     };
 

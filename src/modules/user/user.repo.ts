@@ -15,6 +15,8 @@ export type UserRepo = {
     getByIds(eIds: string[]): Promise<User[]>;
     getGuestsByIds(guestIds: number[]): Promise<Guest[]>;
 
+    // Cristian. Adding getUsers that filters from a query 
+    getPotentialFriends: (query?:string, userId?:string) => Promise<User[]>;
     getUsers: (query?: string, excludeId?: string) => Promise<User[]>;
     listUsers: (query: ListUsersQuery) => Promise<ListUsersPage>;
 
@@ -31,6 +33,7 @@ type UserSearchRow = {
     name: string;
     email: string;
     roleName: string;
+    title: string | null;
     searchScore: number;
     normalizedName: string;
 };
@@ -48,7 +51,8 @@ export function makeUserRepo(db: Db): UserRepo {
                 e_id AS eId,
                 name,
                 email,
-                role_name AS roleName
+                role_name AS roleName,
+                title
             FROM public_users_view
             WHERE e_id = ?`,
             [eId],
@@ -66,7 +70,8 @@ export function makeUserRepo(db: Db): UserRepo {
                 e_id AS eId,
                 name,
                 email,
-                role_name AS roleName
+                role_name AS roleName,
+                title
              FROM public_users_view
              WHERE e_id IN (${placeholders})`,
             eIds,
@@ -89,7 +94,7 @@ export function makeUserRepo(db: Db): UserRepo {
     };
 
     const listUsers = async (query: ListUsersQuery): Promise<ListUsersPage> => {
-        const searchTerm = query.name?.trim();
+        const searchTerm = query.query?.trim();
         const uniqueExcludeIds = uniqueIds(query.excludeId ?? []);
         const hasLimit = query.limit !== undefined;
         const limit = query.limit ?? 0;
@@ -105,13 +110,13 @@ export function makeUserRepo(db: Db): UserRepo {
         if (searchTerm) {
             scoreExpr = `
                 CASE
-                    WHEN LOWER(u.name) = LOWER(?) THEN 3
-                    WHEN LOWER(u.name) LIKE CONCAT(LOWER(?), '%') THEN 2
-                    WHEN LOWER(u.name) LIKE CONCAT('%', LOWER(?), '%') THEN 1
+                    WHEN (LOWER(u.name) = LOWER(?) OR LOWER(u.email) = LOWER(?)) THEN 3
+                    WHEN (LOWER(u.name) LIKE CONCAT(LOWER(?), '%') OR LOWER(u.email) LIKE CONCAT(LOWER(?), '%')) THEN 2
+                    WHEN (LOWER(u.name) LIKE CONCAT('%', LOWER(?), '%') OR LOWER(u.email) LIKE CONCAT('%', LOWER(?), '%')) THEN 1
                     ELSE 0
                 END
             `;
-            selectParams.push(searchTerm, searchTerm, searchTerm);
+            selectParams.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
             whereClauses.push("LOWER(u.name) LIKE CONCAT('%', LOWER(?), '%')");
             whereParams.push(searchTerm);
         }
@@ -151,6 +156,7 @@ export function makeUserRepo(db: Db): UserRepo {
                 filtered.name,
                 filtered.email,
                 filtered.roleName,
+                filtered.title,
                 filtered.searchScore
             FROM (
                 SELECT
@@ -158,6 +164,7 @@ export function makeUserRepo(db: Db): UserRepo {
                     u.name,
                     u.email,
                     u.role_name AS roleName,
+                    u.title,
                     ${scoreExpr} AS searchScore,
                     LOWER(u.name) AS normalizedName
                 FROM public_users_view u
@@ -205,7 +212,7 @@ export function makeUserRepo(db: Db): UserRepo {
 
     const getUsers = async (query?: string, excludeId?: string): Promise<User[]> => {
         const result = await listUsers({
-            name: query,
+            query: query,
             exclude: [],
             excludeId: excludeId ? [excludeId] : [],
             cursor: null,
@@ -214,9 +221,84 @@ export function makeUserRepo(db: Db): UserRepo {
         return result.items;
     };
 
+    const getPotentialFriends = async (query?: string, userId?: string): Promise<User[]> => {
+        const params: unknown[] = [];
+        let where = "";
+
+        if (query?.trim()) {
+        where = `
+            AND (
+            u.name LIKE ?
+            OR u.email LIKE ?
+            )
+        `;
+
+        params.push(`%${query.trim()}%`, `%${query.trim()}%`);
+        }
+
+        const { rows } = await db.query(
+        `
+        SELECT
+            u.e_id AS eId,
+            u.name,
+            u.email,
+            u.role_name AS roleName,
+            u.title,
+            CASE
+            WHEN fr.from_user = ? AND fr.to_user = u.e_id THEN 'PENDING_SENT'
+            WHEN fr.from_user = u.e_id AND fr.to_user = ? THEN 'PENDING_RECEIVED'
+            ELSE NULL
+            END AS friendshipStatus
+        FROM public_users_view u
+        LEFT JOIN friend_requests fr
+            ON (
+            (
+                fr.from_user = ?
+                AND fr.to_user = u.e_id
+            )
+            OR
+            (
+                fr.from_user = u.e_id
+                AND fr.to_user = ?
+            )
+            )
+            AND fr.status = 'pending'
+        WHERE u.e_id <> ?
+            AND NOT EXISTS (
+            SELECT 1
+            FROM friendships f
+            WHERE
+                (
+                f.user_low = ?
+                AND f.user_high = u.e_id
+                )
+                OR
+                (
+                f.user_high = ?
+                AND f.user_low = u.e_id
+                )
+            )
+            ${where}
+        LIMIT 100
+        `,
+        [
+            userId, // CASE pending_sent
+            userId, // CASE pending_received
+            userId, // LEFT JOIN sent
+            userId, // LEFT JOIN received
+            userId, // exclude self
+            userId, // friendships low
+            userId, // friendships high
+            ...params,
+        ],
+        );
+
+        return rows;
+    };
+
     const getAllByName = async (query: string): Promise<User[]> => {
         const result = await listUsers({
-            name: query,
+            query: query,
             exclude: [],
             excludeId: [],
             limit: 100,
@@ -362,6 +444,9 @@ export function makeUserRepo(db: Db): UserRepo {
         listUsers,
         getAllByName,
         TEMPORARY_CREATE,
+
+        getPotentialFriends,
+
         getAllGuests,
         getGuestById,
         createGuest,
