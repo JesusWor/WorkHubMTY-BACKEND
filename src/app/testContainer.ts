@@ -115,6 +115,7 @@ export function buildTestContainer(options: TestContainerOptions = {}) {
   // Worker BullMQ: procesa los delayed jobs de no-show
   const parkingWorker = createParkingWorker({
     markNoShowForReservation: (id) => parkingSlotsRepo.markNoShowForReservation(id),
+    markCheckoutForReservation: (id) => parkingSlotsRepo.markCheckoutForReservation(id),
   });
 
   const reportsRepo = makeReportsRepo(db);
