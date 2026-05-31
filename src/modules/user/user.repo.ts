@@ -239,8 +239,8 @@ export function makeUserRepo(db: Db): UserRepo {
             u.email,
             u.role_name AS roleName,
             CASE
-            WHEN fr.from_user = ? AND fr.to_user = u.e_id THEN 'pending_sent'
-            WHEN fr.from_user = u.e_id AND fr.to_user = ? THEN 'pending_received'
+            WHEN fr.from_user = ? AND fr.to_user = u.e_id THEN 'PENDING_SENT'
+            WHEN fr.from_user = u.e_id AND fr.to_user = ? THEN 'PENDING_RECEIVED'
             ELSE NULL
             END AS friendshipStatus
         FROM public_users_view u

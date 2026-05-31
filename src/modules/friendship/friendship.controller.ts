@@ -96,7 +96,7 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        const request = await service.createRequest(req.user.eId, parsed.data.toUserIds);
+        const request = await service.createRequest(req.user.eId, parsed.data.toUserIds, parsed.data.message);
         GlobalResponse.created(res, request);
     };
 

@@ -1,5 +1,5 @@
 import { FriendshipRepo } from "./friendship.repo.js";
-import { Friendship, FriendRequest, Source } from "./friendship.schema.js";
+import { Friendship, FriendRequest, Source, FriendRequests } from "./friendship.schema.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
 
 export type FriendshipService = {
@@ -11,7 +11,7 @@ export type FriendshipService = {
 
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<FriendRequest[]>;
-    createRequest: (fromUser: string, toUserIds: string[]) => Promise<FriendRequest | null>;
+    createRequest: (fromUser: string, toUserIds: string[], message?:string | undefined) => Promise<FriendRequests | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<Friendship | null>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
     rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
@@ -67,14 +67,14 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         return await repo.getSentRequests(eId);
     };
 
-    const createRequest = async (fromUser: string, toUserIds: string[]): Promise<FriendRequest | null> => {
+    const createRequest = async (fromUser: string, toUserIds: string[], message?:string| undefined): Promise<FriendRequests | null> => {
         if (!fromUser || !toUserIds || toUserIds.length === 0) throw new BadRequestError("Both user ids are required");
         if (toUserIds.includes(fromUser)) throw new BadRequestError("A user cannot send a friend request to themselves");
 
         const alreadyFriends = await repo.areFriends(fromUser, toUserIds[0]);
         if (alreadyFriends) throw new ConflictError("Users are already friends");
 
-        const request = await repo.createRequest(fromUser, toUserIds);
+        const request = await repo.createRequest(fromUser, toUserIds, message);
         if (!request) throw new ConflictError("Friend request already pending");
 
         return request;
