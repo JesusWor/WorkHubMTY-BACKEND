@@ -100,8 +100,8 @@ export function makeParkingSlotsController(
         }
 
         const user = req.user as JwtPayload;
-        const reservation = await service.createReservation(user, parsed.data);
-        GlobalResponse.created(res, reservation);
+        const reservationDetail = await service.createReservation(user, parsed.data);
+        GlobalResponse.created(res, reservationDetail);
     };
 
     const listReservations = async (req: Request, res: Response): Promise<void> => {
