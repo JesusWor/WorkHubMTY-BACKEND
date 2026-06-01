@@ -11,6 +11,7 @@ import {
     ReservationDetailResponse,
     CreateParkingLot,
     UpdateParkingLot,
+    ReservationBucketsResponse,
 } from "./parking-slots.schema.js";
 import {
     BadRequestError,
@@ -138,7 +139,7 @@ export type ParkingSlotsService = {
     listReservations: (query: ListReservationsQuery) => Promise<ListReservationsPage>;
     getUserReservations: (userId: string) => Promise<ReservationDetailResponse[]>;
     getReservationDetail: (id: number, requesterId?: string) => Promise<ReservationDetailResponse>;
-    getBuckets: (query: ReservationBucketsQuery) => Promise<ReservationBucket[]>;
+    getBuckets: (query: ReservationBucketsQuery) => Promise<ReservationBucketsResponse>;
 
     createReservation: (
         requestingUser: JwtPayload,
@@ -229,7 +230,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
 
     const getBuckets = async (
         query: ReservationBucketsQuery
-    ): Promise<ReservationBucket[]> => {
+    ): Promise<ReservationBucketsResponse> => {
         const stepMs = Number(query.step_minutes) * 60 * 1000;
         const buckets: ReservationBucket[] = [];
 
@@ -242,8 +243,9 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             buckets.push({ timestamp: new Date(cursor), reservation_count: count });
             cursor = bucketEnd;
         }
+        const capacity = await repo.getAllLots().then((lots) => lots.reduce((sum, lot) => sum + lot.capacity, 0));
 
-        return buckets;
+        return { capacity, buckets };
     };
 
     const createReservation = async (
