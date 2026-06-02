@@ -153,6 +153,7 @@ export const ReservationBucketSchema = z.object({
 });
 
 export const ReservationBucketsResponseSchema = z.object({
+    capacity: z.number().int().min(0),
     buckets: z.array(ReservationBucketSchema),
 });
 

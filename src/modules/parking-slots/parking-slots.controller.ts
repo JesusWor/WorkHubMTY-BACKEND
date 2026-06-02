@@ -123,8 +123,8 @@ export function makeParkingSlotsController(
             return;
         }
 
-        const buckets = await service.getBuckets(parsed.data);
-        GlobalResponse.okWithData(res, { buckets });
+        const bucketResponse = await service.getBuckets(parsed.data);
+        GlobalResponse.okWithData(res, bucketResponse );
     };
 
     const getMyReservations = async (req: Request, res: Response): Promise<void> => {
