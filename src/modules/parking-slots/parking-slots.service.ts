@@ -144,7 +144,7 @@ export type ParkingSlotsService = {
     createReservation: (
         requestingUser: JwtPayload,
         data: { user_id?: string; start_time: Date; end_time: Date }
-    ) => Promise<ParkingReservation>;
+    ) => Promise<ReservationDetailResponse>;
 
     patchAttendance: (
         id: number,
@@ -251,7 +251,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
     const createReservation = async (
         requestingUser: JwtPayload,
         data: { user_id?: string; start_time: Date; end_time: Date }
-    ): Promise<ParkingReservation> => {
+    ): Promise<ReservationDetailResponse> => {
         const isAdmin = requestingUser.role === Roles.ADMIN;
         let effectiveUserId = requestingUser.eId;
 
@@ -310,8 +310,12 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             console.error("[queue] Error al encolar auto-checkout:", (err as Error).message);
         }
 
+        const lots = await repo.getAllLots();
+        const projection = await computeProjection(repo, reservation, lots);
+
         emitter.emit("reservation.created", reservation);
-        return reservation;
+
+        return { reservation, projection };
     };
 
     const patchAttendance = async (
@@ -319,9 +323,9 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         next: AttendanceStatus,
         requestingUser: JwtPayload
     ): Promise<ParkingReservation> => {
-        const isAdmin = requestingUser.role === Roles.ADMIN;
+        const isAdminOrAttendant = requestingUser.role === Roles.ADMIN || requestingUser.role === Roles.ACCESS_ATTENDANT;
 
-        const reservation = isAdmin
+        const reservation = isAdminOrAttendant
             ? await repo.getReservationById(id)
             : await repo.getReservationByIdAndUser(id, requestingUser.eId);
 
