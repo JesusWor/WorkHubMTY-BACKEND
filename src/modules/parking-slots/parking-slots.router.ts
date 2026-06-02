@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { ParkingSlotsController } from "./parking-slots.controller.js";
-import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware/index.js";
+import { authenticate, authorize, INTERNAL_ROLES, SUPERVISOR_ROLES, STAFF_ROLES, asyncHandler } from "../../middleware/index.js";
 
 /**
  * Rutas de Parking Lots.
@@ -18,29 +18,27 @@ import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../
 export function makeParkingSlotsRouter(controller: ParkingSlotsController): Router {
     const router = Router();
 
-    const SUPERVISOR_POLICY: RolePolicy = { allow: [Roles.ADMIN] };
-    const NOT_GUEST_POLICY: RolePolicy = { deny: [Roles.GUEST] };
-
     // Reservations
 
-    router.post("/reservations", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.createReservation));
+    router.post("/reservations", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.createReservation));
 
-    router.get("/reservations", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.listReservations));
-    router.get("/reservations/buckets", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getBuckets));
-    router.get("/reservations/me", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getMyReservations));
-    router.get("/reservations/:id", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getReservationDetail));
+    router.get("/reservations", authenticate, authorize({ allow: SUPERVISOR_ROLES }), asyncHandler(controller.listReservations));
+    router.get("/reservations/buckets", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.getBuckets));
+    router.get("/reservations/me", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.getMyReservations));
+    router.get("/reservations/:id", authenticate, authorize({ allow: [...INTERNAL_ROLES, ...STAFF_ROLES] }), asyncHandler(controller.getReservationDetail));
 
-    router.patch("/reservations/:id/attendance", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.patchAttendance));
+    router.patch("/reservations/:id/attendance", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.patchAttendance));
+    router.post("/reservations/:id/checkin", authenticate, authorize({ allow: [...INTERNAL_ROLES, ...STAFF_ROLES] }), asyncHandler(controller.checkInAttendant));
 
-    router.delete("/reservations/:id", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.cancelReservation));
+    router.delete("/reservations/:id", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.cancelReservation));
 
     // Parking Slots
 
-    router.post("/", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.createLot));
-    router.get("/", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getAllLots));
-    router.get("/:id", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getLotById));
-    router.patch("/:id", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.updateLot));
-    router.delete("/:id", authenticate, authorize(SUPERVISOR_POLICY), asyncHandler(controller.deleteLot));
+    router.post("/", authenticate, authorize({ allow: SUPERVISOR_ROLES }), asyncHandler(controller.createLot));
+    router.get("/", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.getAllLots));
+    router.get("/:id", authenticate, authorize({ allow: INTERNAL_ROLES }), asyncHandler(controller.getLotById));
+    router.patch("/:id", authenticate, authorize({ allow: SUPERVISOR_ROLES }), asyncHandler(controller.updateLot));
+    router.delete("/:id", authenticate, authorize({ allow: SUPERVISOR_ROLES }), asyncHandler(controller.deleteLot));
 
     return router;
 }

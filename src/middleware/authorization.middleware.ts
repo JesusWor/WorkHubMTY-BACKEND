@@ -3,8 +3,8 @@ import { GlobalResponse } from "../shared/response/globalresponse.js";
 import { Roles } from "../shared/types/role.type.js";
 
 export type RolePolicy = {
-    allow?: Roles[];
-    deny?: Roles[];
+    allow?: readonly Roles[];
+    deny?: readonly Roles[];
 };
 
 export const authorize = (policy: RolePolicy) => {

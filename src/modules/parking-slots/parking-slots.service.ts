@@ -321,9 +321,9 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         next: AttendanceStatus,
         requestingUser: JwtPayload
     ): Promise<ParkingReservation> => {
-        const isAdmin = requestingUser.role === Roles.ADMIN;
+        const isAdminOrAttendant = requestingUser.role === Roles.ADMIN || requestingUser.role === Roles.ACCESS_ATTENDANT;
 
-        const reservation = isAdmin
+        const reservation = isAdminOrAttendant
             ? await repo.getReservationById(id)
             : await repo.getReservationByIdAndUser(id, requestingUser.eId);
 

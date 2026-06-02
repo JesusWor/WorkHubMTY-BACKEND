@@ -29,6 +29,7 @@ export type ParkingSlotsController = {
     getMyReservations: (req: Request, res: Response) => Promise<void>;
     getReservationDetail: (req: Request, res: Response) => Promise<void>;
     patchAttendance: (req: Request, res: Response) => Promise<void>;
+    checkInAttendant: (req: Request, res: Response) => Promise<void>;
     cancelReservation: (req: Request, res: Response) => Promise<void>;
 };
 
@@ -150,8 +151,8 @@ export function makeParkingSlotsController(
             return;
         }
 
-        const isAdmin = mapRole(reqRole) === Roles.ADMIN;
-        const requesterId = isAdmin ? undefined : req.user?.eId;
+        const isAdminOrAttendant = mapRole(reqRole) === Roles.ADMIN || mapRole(reqRole) === Roles.ACCESS_ATTENDANT;
+        const requesterId = isAdminOrAttendant ? undefined : req.user?.eId;
 
         const detail = await service.getReservationDetail(parsed.data.id, requesterId);
         GlobalResponse.okWithData(res, detail);
@@ -179,6 +180,22 @@ export function makeParkingSlotsController(
         GlobalResponse.okWithData(res, updated);
     };
 
+    const checkInAttendant = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+
+        const user = req.user as JwtPayload;
+        const updated = await service.patchAttendance(
+            parsed.data.id,
+            "CHECKED_IN",
+            user
+        );
+        GlobalResponse.okWithData(res, updated);
+    }
+
     const cancelReservation = async (req: Request, res: Response): Promise<void> => {
         const parsed = ReservationIdParamSchema.safeParse(req.params);
         if (!parsed.success) {
@@ -204,6 +221,7 @@ export function makeParkingSlotsController(
         getMyReservations,
         getReservationDetail,
         patchAttendance,
+        checkInAttendant,
         cancelReservation,
     };
 }
