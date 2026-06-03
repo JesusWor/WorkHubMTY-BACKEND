@@ -30,6 +30,7 @@ export const Rooms = {
     team: (teamId: number) => `team:${teamId}` as const,
     teamMembers: (teamId: number) => `teamMembers:${teamId}` as const,
     parking: "parking" as const,
+    office: "office" as const,
     admin: "admin" as const,
 } as const;
 
@@ -118,6 +119,16 @@ export const initSocket = (server: HttpServer, deps: SocketServerDeps) => {
         socket.on("leaveParkingRoom", () => {
             socket.leave(Rooms.parking);
             console.log(`[socket] ${eId} left parking`);
+        });
+        //   // Office
+        socket.on("joinOfficeRoom", () => {
+            socket.join(Rooms.office);
+            console.log(`[socket] ${eId} joined office`);
+        });
+
+        socket.on("leaveOfficeRoom", () => {
+            socket.leave(Rooms.office);
+            console.log(`[socket] ${eId} left office`);
         });
 
         // Friends room — el server resuelve friendIds y mete al socket en cada

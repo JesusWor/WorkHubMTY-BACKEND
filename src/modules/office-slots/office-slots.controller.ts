@@ -1,200 +1,240 @@
-import { Request, Response } from "express";
-import { OfficeSlotsService } from "./office-slots.service.js";
-import { GlobalResponse } from "../../shared/response/globalresponse.js";
+import { Request, Response } from 'express';
+import { OfficeSlotsService } from './office-slots.service.js';
+import { GlobalResponse } from '../../shared/response/globalresponse.js';
 import {
-    CreateOfficeSlotSchema,
-    UpdateOfficeSlotSchema,
-    BlockSlotBodySchema,
-    AvailableOfficeSlotsSchema,
+    CreateReservableSchema,
+    UpdateReservableSchema,
     CreateReservationBatchSchema,
-    UpdateParticipantStatusSchema,
-    SlotIdParamSchema,
+    PatchReservationAttendanceSchema,
+    PatchParticipantAttendanceSchema,
+    ListReservationsQuerySchema,
+    ReservationIdParamSchema,
     ParticipantIdParamSchema,
-    CreateEventSchema,
-    GetEventsQuerySchema,
-} from "./office-slots.schema.js";
+    UserIdParamSchema,
+} from './office-slots.schema.js';
+import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
 export type OfficeSlotsController = {
-    getAll: (req: Request, res: Response) => Promise<void>;
-    getAvailable: (req: Request, res: Response) => Promise<void>;
-    getById: (req: Request, res: Response) => Promise<void>;
-    create: (req: Request, res: Response) => Promise<void>;
-    update: (req: Request, res: Response) => Promise<void>;
-    remove: (req: Request, res: Response) => Promise<void>;
-    setBlock: (req: Request, res: Response) => Promise<void>;
-    getWorkGroups: (req: Request, res: Response) => Promise<void>;
-    getUsers: (req: Request, res: Response) => Promise<void>;
-    getGuests: (req: Request, res: Response) => Promise<void>;
+    // Reservables
+    getAllReservables: (req: Request, res: Response) => Promise<void>;
+    getReservableById: (req: Request, res: Response) => Promise<void>;
+    createReservable: (req: Request, res: Response) => Promise<void>;
+    updateReservable: (req: Request, res: Response) => Promise<void>;
+    deleteReservable: (req: Request, res: Response) => Promise<void>;
+
+    // Reservations
+    listReservations: (req: Request, res: Response) => Promise<void>;
     getReservationDetail: (req: Request, res: Response) => Promise<void>;
-    createReservations: (req: Request, res: Response) => Promise<void>;
-    updateParticipantStatus: (req: Request, res: Response) => Promise<void>;
     getMyReservations: (req: Request, res: Response) => Promise<void>;
-    getMyFriendsReservations: (req: Request, res: Response) => Promise<void>;
-    // ─── Events ───────────────────────────────────────────────────────────────────
-    getEvents: (req: Request, res: Response) => Promise<void>;
-    getEventById: (req: Request, res: Response) => Promise<void>;
-    createEvent: (req: Request, res: Response) => Promise<void>;
-}
+    createReservationBatch: (req: Request, res: Response) => Promise<void>;
+    cancelReservation: (req: Request, res: Response) => Promise<void>;
+    participantCheckin: (req: Request, res: Response) => Promise<void>;
+    participantCheckout: (req: Request, res: Response) => Promise<void>;
+    patchReservationAttendance: (req: Request, res: Response) => Promise<void>;
+    patchParticipantAttendance: (req: Request, res: Response) => Promise<void>;
+
+    // Vista por usuario
+    getUserReservationsList: (req: Request, res: Response) => Promise<void>;
+};
 
 export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSlotsController {
-    // FEATURE 1: OFFICE SLOTS (Espacios de trabajo)
+    // Reservables
 
-    const getAll = async (req: Request, res: Response): Promise<void> => {
-        const floor_id = req.query.floor_id ? Number(req.query.floor_id) : undefined;
-        const slots = await service.getAllSlots({ floor_id });
+    const getAllReservables = async (_req: Request, res: Response): Promise<void> => {
+        const slots = await service.getAllReservables();
         GlobalResponse.okWithData(res, slots);
     };
 
-    const getAvailable = async (req: Request, res: Response): Promise<void> => {
-        const query = AvailableOfficeSlotsSchema.parse(req.query);
-        const slots = await service.getAvailableSlots(query);
-        GlobalResponse.okWithData(res, slots);
-    };
-
-    const getById = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const slot = await service.getSlotById(id);
+    const getReservableById = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const slot = await service.getReservableById(parsed.data.id);
         GlobalResponse.okWithData(res, slot);
     };
 
-    const create = async (req: Request, res: Response): Promise<void> => {
-        const body = CreateOfficeSlotSchema.parse(req.body);
-        const slot = await service.createSlot(body);
+    const createReservable = async (req: Request, res: Response): Promise<void> => {
+        const parsed = CreateReservableSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const slot = await service.createReservable(parsed.data);
         GlobalResponse.created(res, slot);
     };
 
-    const update = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const body = UpdateOfficeSlotSchema.parse(req.body);
-        const slot = await service.updateSlot(id, body);
+    const updateReservable = async (req: Request, res: Response): Promise<void> => {
+        const paramParsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!paramParsed.success) {
+            GlobalResponse.zodError(res, paramParsed.error);
+            return;
+        }
+        const bodyParsed = UpdateReservableSchema.safeParse(req.body);
+        if (!bodyParsed.success) {
+            GlobalResponse.zodError(res, bodyParsed.error);
+            return;
+        }
+        const slot = await service.updateReservable(paramParsed.data.id, bodyParsed.data);
         GlobalResponse.okWithData(res, slot);
     };
 
-    const remove = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const result = await service.deleteSlot(id);
-        GlobalResponse.ok(res, result.message);
+    const deleteReservable = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        await service.deleteReservable(parsed.data.id);
+        GlobalResponse.ok(res, `Slot ${parsed.data.id} eliminado`);
     };
 
-    const setBlock = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const body = BlockSlotBodySchema.parse(req.body);
-        const slot = await service.setBlockStatus(id, body);
-        GlobalResponse.okWithData(res, slot);
+    // Reservations
+
+    const listReservations = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ListReservationsQuerySchema.safeParse(req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const { items, nextCursor } = await service.listReservations(parsed.data, caller);
+        GlobalResponse.okWithCursor(res, items, nextCursor);
     };
-
-    // FEATURE 2: WORK GROUPS (Grupos de trabajo)
-
-    const getWorkGroups = async (req: Request, res: Response): Promise<void> => {
-        const workGroups = await service.getWorkGroups();
-        GlobalResponse.okWithData(res, workGroups);
-    };
-
-    // FEATURE 3: RESERVATIONS (Reservaciones)
 
     const getReservationDetail = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const detail = await service.getReservationDetail(id);
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const detail = await service.getReservationDetail(parsed.data.id, caller);
         GlobalResponse.okWithData(res, detail);
     };
 
-    // ✅ ACTUALIZADO: Obtener userId del usuario autenticado
-    const createReservations = async (req: Request, res: Response): Promise<void> => {
-        const body = CreateReservationBatchSchema.parse(req.body);
-
-        // ✅ Obtener el userId del usuario autenticado
-        const currentUserId = req.user?.eId;
-
-        if (!currentUserId) {
-            GlobalResponse.badRequest(res, "User not authenticated");
-            return;
-        }
-
-        // ✅ Pasar currentUserId al servicio para marcar como ACCEPTED
-        console.log("Llego:", body);
-        console.log("Creating reservations for user:", currentUserId);
-        const reservations = await service.createReservationBatch(body, currentUserId);
-        console.log("Reservations created:", reservations);
-        GlobalResponse.created(res, reservations);
-    };
-
-    const updateParticipantStatus = async (req: Request, res: Response): Promise<void> => {
-        const { pid } = ParticipantIdParamSchema.parse(req.params);
-        const body = UpdateParticipantStatusSchema.parse(req.body);
-        const participant = await service.updateParticipantStatus(pid, body.status, body.reinvite);
-        GlobalResponse.okWithData(res, participant);
-    };
-
     const getMyReservations = async (req: Request, res: Response): Promise<void> => {
-        const userId = req.user?.eId;
-        if (!userId) {
-            GlobalResponse.badRequest(res, "User not authenticated");
-            return;
-        }
-        const reservations = await service.getMyReservations(userId);
+        const caller = req.user as JwtPayload;
+        const reservations = await service.getMyReservations(caller);
         GlobalResponse.okWithData(res, reservations);
     };
 
-    const getMyFriendsReservations = async (req: Request, res: Response): Promise<void> => {
-        const userId = req.user?.eId;
-        if (!userId) {
-            GlobalResponse.badRequest(res, "User not authenticated");
+    const createReservationBatch = async (req: Request, res: Response): Promise<void> => {
+        const parsed = CreateReservationBatchSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
             return;
         }
-        const reservations = await service.getMyFriendsReservations(userId);
-        GlobalResponse.okWithData(res, reservations);
+        const caller = req.user as JwtPayload;
+        const created = await service.createReservationBatch(parsed.data, caller);
+        GlobalResponse.created(res, created);
     };
 
-    // FEATURE 4: EVENTS (Eventos)
-
-    const getEvents = async (req: Request, res: Response): Promise<void> => {
-        const query = GetEventsQuerySchema.parse(req.query);
-        const events = await service.getEvents(query);
-        GlobalResponse.okWithData(res, events);
+    const cancelReservation = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const updated = await service.cancelReservation(parsed.data.id, caller);
+        GlobalResponse.okWithData(res, updated);
     };
 
-    const getEventById = async (req: Request, res: Response): Promise<void> => {
-        const { id } = SlotIdParamSchema.parse(req.params);
-        const event = await service.getEventById(id);
-        GlobalResponse.okWithData(res, event);
+    const participantCheckin = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const result = await service.participantCheckin(parsed.data.id, caller);
+        GlobalResponse.okWithData(res, result);
     };
 
-    const createEvent = async (req: Request, res: Response): Promise<void> => {
-        const body = CreateEventSchema.parse(req.body);
-        const event = await service.createEvent(body);
-        GlobalResponse.created(res, event);
+    const participantCheckout = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const result = await service.participantCheckout(parsed.data.id, caller);
+        GlobalResponse.okWithData(res, result);
     };
 
-    // METADATA ENDPOINTS (Metadata para clientes)
-
-    const getUsers = async (req: Request, res: Response): Promise<void> => {
-        const users = await service.getUsers();
-        GlobalResponse.okWithData(res, users);
+    const patchReservationAttendance = async (req: Request, res: Response): Promise<void> => {
+        const paramParsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!paramParsed.success) {
+            GlobalResponse.zodError(res, paramParsed.error);
+            return;
+        }
+        const bodyParsed = PatchReservationAttendanceSchema.safeParse(req.body);
+        if (!bodyParsed.success) {
+            GlobalResponse.zodError(res, bodyParsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const updated = await service.patchReservationAttendance(
+            paramParsed.data.id,
+            bodyParsed.data.attendance_status,
+            caller,
+        );
+        GlobalResponse.okWithData(res, updated);
     };
 
-    const getGuests = async (req: Request, res: Response): Promise<void> => {
-        const guests = await service.getGuests();
-        GlobalResponse.okWithData(res, guests);
+    const patchParticipantAttendance = async (req: Request, res: Response): Promise<void> => {
+        const paramParsed = ParticipantIdParamSchema.safeParse(req.params);
+        if (!paramParsed.success) {
+            GlobalResponse.zodError(res, paramParsed.error);
+            return;
+        }
+        const bodyParsed = PatchParticipantAttendanceSchema.safeParse(req.body);
+        if (!bodyParsed.success) {
+            GlobalResponse.zodError(res, bodyParsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const updated = await service.patchParticipantAttendance(
+            paramParsed.data.id,
+            paramParsed.data.participantId,
+            bodyParsed.data.attendance_status,
+            caller,
+        );
+        GlobalResponse.okWithData(res, updated);
+    };
+
+    // Vista por usuario
+
+    const getUserReservationsList = async (req: Request, res: Response): Promise<void> => {
+        const parsed = UserIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        const result = await service.getUserReservationsView(parsed.data.userId, caller);
+        GlobalResponse.okWithData(res, result);
     };
 
     return {
-        getAll,
-        getAvailable,
-        getById,
-        create,
-        update,
-        remove,
-        setBlock,
-        getWorkGroups,
-        getUsers,
-        getGuests,
+        getAllReservables,
+        getReservableById,
+        createReservable,
+        updateReservable,
+        deleteReservable,
+
+        listReservations,
         getReservationDetail,
-        createReservations,
-        updateParticipantStatus,
         getMyReservations,
-        getMyFriendsReservations,
-        getEvents,
-        getEventById,
-        createEvent,
+        createReservationBatch,
+        cancelReservation,
+        participantCheckin,
+        participantCheckout,
+        patchReservationAttendance,
+        patchParticipantAttendance,
+
+        getUserReservationsList,
     };
 }

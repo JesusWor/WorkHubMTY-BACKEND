@@ -1,48 +1,116 @@
-// office-slots.routes.ts
-import { Router } from "express";
-import { OfficeSlotsController } from "./office-slots.controller.js";
-import { authenticate, authorize, Roles, asyncHandler } from "../../middleware/index.js";
-import { makeReservablesRouter } from "./reservables.router.js";
-import { makeReservationsRouter } from "./reservations.router.js";
-import { makeEventsRouter } from "./events.router.js";
-import { makeWorkGroupsRouter } from "./work-groups.router.js";
+import { Router } from 'express';
+import { OfficeSlotsController } from './office-slots.controller.js';
+import {
+    authenticate,
+    authorize,
+    INTERNAL_ROLES,
+    SUPERVISOR_ROLES,
+    STAFF_ROLES,
+    asyncHandler,
+} from '../../middleware/index.js';
 
 export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router {
     const router = Router();
 
-    // New split routers
-    router.use("/reservables", makeReservablesRouter(controller));
-    router.use("/reservations", makeReservationsRouter(controller));
-    router.use("/events", makeEventsRouter(controller));
-    router.use("/work-groups", makeWorkGroupsRouter(controller));
+    // Reservables - Office slots
+    router.get(
+        '/slots',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getAllReservables),
+    );
+    router.post(
+        '/slots',
+        authenticate,
+        authorize({ allow: SUPERVISOR_ROLES }),
+        asyncHandler(controller.createReservable),
+    );
+    router.get(
+        '/slots/:id',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getReservableById),
+    );
+    router.patch(
+        '/slots/:id',
+        authenticate,
+        authorize({ allow: SUPERVISOR_ROLES }),
+        asyncHandler(controller.updateReservable),
+    );
+    router.delete(
+        '/slots/:id',
+        authenticate,
+        authorize({ allow: SUPERVISOR_ROLES }),
+        asyncHandler(controller.deleteReservable),
+    );
 
-    // FEATURE 1: OFFICE SLOTS (Espacios de trabajo)
-    router.get("/office-slots/available", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getAvailable));
-    router.get("/office-slots", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getAll));
-    router.get("/office-slots/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getById));
-    router.post("/office-slots", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.create));
-    router.patch("/office-slots/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.update));
-    router.delete("/office-slots/:id", authenticate, authorize({ allow: [Roles.ADMIN] }), asyncHandler(controller.remove));
-    router.post("/office-slots/:id/block", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.setBlock));
+    // Reservations
+    router.post(
+        '/reservations',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.createReservationBatch),
+    );
+    router.get(
+        '/reservations',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.listReservations),
+    );
+    router.get(
+        '/reservations/me',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getMyReservations),
+    );
+    router.get(
+        '/reservations/:id',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getReservationDetail),
+    );
 
-    // FEATURE 2: EVENTS (Eventos)
-    router.get("/events", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getEvents));
-    router.get("/events/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getEventById));
-    router.post("/events", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT] }), asyncHandler(controller.createEvent));
+    router.post(
+        '/reservations/:id/checkin',
+        authenticate,
+        authorize({ allow: [...INTERNAL_ROLES, ...STAFF_ROLES] }),
+        asyncHandler(controller.participantCheckin),
+    );
+    router.post(
+        '/reservations/:id/checkout',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.participantCheckout),
+    );
 
-    // METADATA ENDPOINTS (Metadata para clientes)
-    router.get("/users", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getUsers));
-    router.get("/guests", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getGuests));
+    router.patch(
+        '/reservations/:id/attendance',
+        authenticate,
+        authorize({ allow: [...SUPERVISOR_ROLES, ...STAFF_ROLES] }),
+        asyncHandler(controller.patchReservationAttendance),
+    );
 
-    // FEATURE 3: WORK GROUPS (Grupos de trabajo)
-    router.get("/work-groups", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getWorkGroups));
+    router.patch(
+        '/reservations/:id/participants/:participantId/attendance',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.patchParticipantAttendance),
+    );
 
-    // FEATURE 4: RESERVATIONS (Reservaciones)
-    router.get("/me", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyReservations));
-    router.get("/me/friends", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getMyFriendsReservations));
-    router.get("/:id", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.getReservationDetail));
-    router.post("/", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.createReservations));
-    router.patch("/participants/:pid/status", authenticate, authorize({ allow: [Roles.ADMIN, Roles.IT, Roles.USER] }), asyncHandler(controller.updateParticipantStatus));
+    router.delete(
+        '/reservations/:id',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.cancelReservation),
+    );
+
+    // User view
+    router.get(
+        '/users/:userId/reservations',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getUserReservationsList),
+    );
 
     return router;
 }
