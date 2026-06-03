@@ -72,28 +72,28 @@ export function initUserBroadcaster(): void {
     userEvents.on("friendRequest.sent", (req) => {
         const msg: UserUpdateMessage = { type: "friendRequest.sent", payload: req };
         emitUserUpdate(Rooms.dm(req.fromUser), msg);
-        emitUserUpdate(Rooms.dm(req.toUser), msg);
+        req.toUserIds.forEach((to) => emitUserUpdate(Rooms.dm(to), msg));
         emitToAdmin({ domain: "user", event: msg });
     });
 
     userEvents.on("friendRequest.accepted", (req) => {
         const msg: UserUpdateMessage = { type: "friendRequest.accepted", payload: req };
         emitUserUpdate(Rooms.dm(req.fromUser), msg);
-        emitUserUpdate(Rooms.dm(req.toUser), msg);
+        req.toUserIds.forEach((to) => emitUserUpdate(Rooms.dm(to), msg));
         emitToAdmin({ domain: "user", event: msg });
     });
 
     userEvents.on("friendRequest.canceled", (req) => {
         const msg: UserUpdateMessage = { type: "friendRequest.canceled", payload: req };
         emitUserUpdate(Rooms.dm(req.fromUser), msg);
-        emitUserUpdate(Rooms.dm(req.toUser), msg);
+        req.toUserIds.forEach((to) => emitUserUpdate(Rooms.dm(to), msg));
         emitToAdmin({ domain: "user", event: msg });
     });
 
     userEvents.on("friendRequest.rejected", (req) => {
         const msg: UserUpdateMessage = { type: "friendRequest.rejected", payload: req };
         emitUserUpdate(Rooms.dm(req.fromUser), msg);
-        emitUserUpdate(Rooms.dm(req.toUser), msg);
+        req.toUserIds.forEach((to) => emitUserUpdate(Rooms.dm(to), msg));
         emitToAdmin({ domain: "user", event: msg });
     });
 }

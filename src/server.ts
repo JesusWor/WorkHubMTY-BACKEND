@@ -5,7 +5,7 @@ import { createApp } from './app/app.js';
 import { env } from './config/env.js';
 import { buildContainer } from './app/container.js';
 import { initSocket } from './infra/websocket/socket.server.js';
-import { reviveParkingJobs } from './infra/queue/parking-revival.js';
+import { reviveOfficeJobs, reviveParkingJobs } from './infra/queue/index.js';
 import { validateAchievementsListenerRules } from './modules/achievements/index.js';
 
 const container = buildContainer();
@@ -26,6 +26,7 @@ server.listen(PORT, "0.0.0.0", async () => {
     // Revival de delayed jobs de no-show perdidos durante downtime
     try {
         await reviveParkingJobs(container.parkingSlotsRepo);
+        await reviveOfficeJobs(container.officeSlotsRepo);
     } catch (err) {
         console.error("[revival] Error al re-encolar jobs de no-show:", err);
     }

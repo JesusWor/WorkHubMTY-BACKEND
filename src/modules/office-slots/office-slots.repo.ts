@@ -1,677 +1,586 @@
-import { Db } from "../../infra/db/db.js";
+import { Db } from '../../infra/db/db.js';
+import { Cursor } from '../../shared/utils/cursor.utils.js';
 import {
-    CreateOfficeSlotBody,
-    OfficeSlot,
-    UpdateOfficeSlotBody,
-    FriendOccupancy,
-    WorkGroup,
-    UserSummary,
-    GuestSummary,
-    ParticipantStatus,
-    UserReservationSummary,
-    FriendReservationsSummary,
-    Event,
-    CreateEventBody,
-    GetEventsQuery,
-} from "./office-slots.schema.js";
-import { toMysqlUtc } from "../../shared/utils/date.utils.js";
+    Reservable,
+    Reservation,
+    Participant,
+    ReservationWithParticipants,
+    ReservationAttendanceStatus,
+    ParticipantAttendanceStatus,
+    ListReservationsQuery,
+    ListReservationsPage,
+    ListReservationsCursorSchema,
+    inferReservationLifecycle,
+} from './office-slots.schema.js';
+
+type ReservationRow = Omit<Reservation, 'lifecycle_status' | 'reservable' | 'participants'>;
+type ParticipantRow = Participant;
+
+function hydrateReservation(row: ReservationRow): Reservation {
+    return {
+        ...row,
+        lifecycle_status: inferReservationLifecycle(row.attendance_status),
+    };
+}
 
 export type OfficeSlotsRepo = {
-    findAll: (filters: { floor_id?: number }) => Promise<any[]>;
-    findById: (id: number) => Promise<OfficeSlot | null>;
-    findAvailable: (startTime: string, endTime: string, filters: { floor_id?: number }) => Promise<any[]>;
-    findFriendOccupancy: (slotIds: number[], userId: string, startTime: string, endTime: string) => Promise<FriendOccupancy[]>;
-    findWorkGroups: () => Promise<WorkGroup[]>;
-    findUsers: () => Promise<UserSummary[]>;
-    findGuests: () => Promise<GuestSummary[]>;
-    findWorkGroupMembers: (workGroupIds: number[]) => Promise<Array<{ work_group_id: number; user_id: string }>>;
-    create: (data: CreateOfficeSlotBody) => Promise<number>;
-    update: (id: number, data: UpdateOfficeSlotBody) => Promise<boolean>;
-    remove: (id: number) => Promise<boolean>;
-    setBlocked: (id: number, isBlocked: boolean) => Promise<boolean>;
-    floorExists: (floorId: number) => Promise<boolean>;
-    findReservationsByReservable: (reservableId: number) => Promise<Array<{ id: number; reservable_id: number; start_time: string; end_time: string; can_overlap: number }>>;
-    findReservationById: (reservationId: number) => Promise<{ id: number; reservable_id: number; start_time: string; end_time: string; can_overlap: number; description: string } | null>;
-    findReservationWorkGroups: (reservationIds: number[]) => Promise<Array<{ reservationId: number; id: number; name: string; description: string | null }>>;
-    findParticipantsByReservationIds: (reservationIds: number[]) => Promise<Array<{ id: number; reservationId: number; userId: string | null; guestId: number | null; ownershipPriority: number; checkedIn: number; status: string; user_name: string | null; user_email: string | null; user_role: string | null; guest_name: string | null; guest_email: string | null }>>;
-    createReservation: (reservableId: number, startTime: string, endTime: string, canOverlap: boolean, description: string) => Promise<number>;
-    addReservationWorkGroups: (reservationId: number, workGroupIds: number[]) => Promise<void>;
-    addReservationParticipant: (reservationId: number, userId: string | null, guestId: number | null, ownershipPriority: number, status: ParticipantStatus) => Promise<number>;
-    findParticipantById: (participantId: number) => Promise<{ id: number; reservationId: number; userId: string | null; guestId: number | null; ownershipPriority: number; checkedIn: number; status: string; user_name: string | null; user_email: string | null; user_role: string | null; guest_name: string | null; guest_email: string | null } | null>;
-    updateParticipantStatus: (participantId: number, status: ParticipantStatus) => Promise<boolean>;
-    findReservationsByUserId: (userId: string) => Promise<number[]>;
-    findReservationsByUserIds: (userIds: string[]) => Promise<number[]>;
-    findMyReservationSummaries: (userId: string) => Promise<UserReservationSummary>;
-    findFriendsReservationSummaries: (userIds: string[]) => Promise<FriendReservationsSummary>;
-    // ─── Events ───────────────────────────────────────────────────────────────────
-    findEvents: (query: GetEventsQuery) => Promise<Event[]>;
-    createEvent: (data: CreateEventBody) => Promise<number>;
-    findEventById: (id: number) => Promise<Event | null>;
-    /**
-     * Returns overlapping reservations (where can_overlap = 0) for a given
-     * reservable and time window. Used inside the create-reservation transaction.
-     */
-    findOverlappingReservations: (reservableId: number, startTime: string, endTime: string) => Promise<Array<{ id: number }>>;
-    /**
-     * Returns overlapping events for a given reservable and time window.
-     * Used inside the create-reservation and create-event transactions.
-     */
-    findOverlappingEvents: (reservableId: number, startTime: string, endTime: string) => Promise<Array<{ id: number }>>;
+    // Reservables
+    getAllReservables: () => Promise<Reservable[]>;
+    getReservableById: (id: number) => Promise<Reservable | null>;
+    createReservable: (data: Omit<Reservable, 'id'>) => Promise<Reservable | null>;
+    updateReservable: (
+        id: number,
+        fields: Partial<Omit<Reservable, 'id'>>,
+    ) => Promise<Reservable | null>;
+    deleteReservable: (id: number) => Promise<boolean>;
+
+    // Reservations
+    getReservationById: (id: number) => Promise<Reservation | null>;
+    getReservationWithParticipants: (id: number) => Promise<ReservationWithParticipants | null>;
+    listReservations: (
+        query: ListReservationsQuery,
+        callerEId: string,
+        friendIds: string[],
+    ) => Promise<ListReservationsPage>;
+    getReservationsByUser: (userId: string) => Promise<ReservationWithParticipants[]>;
+
+    createReservationBatch: (
+        creatorId: string,
+        reservableId: number,
+        category: string,
+        description: string,
+        timestamps: Array<{ start_time: Date; end_time: Date }>,
+        participantIds: string[], // user_ids a invitar (sin el creador)
+    ) => Promise<ReservationWithParticipants[]>;
+    cancelReservation: (id: number) => Promise<Reservation | null>;
+    updateReservationAttendance: (
+        id: number,
+        status: ReservationAttendanceStatus,
+    ) => Promise<Reservation | null>;
+
+    // Participants
+    getParticipantById: (participantId: number) => Promise<Participant | null>;
+    getParticipantByReservationAndUser: (
+        reservationId: number,
+        userId: string,
+    ) => Promise<Participant | null>;
+    getParticipantsByReservation: (reservationId: number) => Promise<Participant[]>;
+
+    updateParticipantAttendance: (
+        participantId: number,
+        status: ParticipantAttendanceStatus,
+    ) => Promise<Participant | null>;
+
+    // Queue helpers
+    markNoShowForReservation: (
+        reservationId: number,
+    ) => Promise<
+        | { marked: true; reservation: Reservation; participants: Participant[] }
+        | { marked: false; reason: string }
+    >;
+    markCheckoutForReservation: (reservationId: number) => Promise<
+        | {
+            action: 'checked_out' | 'no_show_fallback';
+            reservation: Reservation;
+            participants: Participant[];
+        }
+        | { action: 'skipped'; reason: string }
+    >;
+    getPendingNoShowReservations: (
+        checkinToleranceMinutes: number,
+    ) => Promise<Array<Pick<Reservation, 'id' | 'start_time'>>>;
+    getPendingCheckoutReservations: () => Promise<Array<Pick<Reservation, 'id' | 'end_time'>>>;
 };
 
 export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
-    const findAll = async (filters: { floor_id?: number }): Promise<any[]> => {
-    const conditions: string[] = [];
-    const params: any[] = [];
+    // Reservables
 
-    if (filters.floor_id !== undefined) {
-        conditions.push("r.floor_id = ?");
-        params.push(filters.floor_id);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-
-    const { rows } = await db.query(
-        `SELECT 
-            r.id,
-            r.name,
-            r.capacity,
-            r.floor_id,
-            r.is_blocked,
-            f.name AS floor_name,
-            f.floor_number,
-            COALESCE(active.cnt, 0) AS current_reservations,
-            (r.is_blocked = 0 AND COALESCE(active.cnt, 0) < r.capacity) AS is_available
-        FROM reservables r
-        JOIN floors f ON f.id = r.floor_id
-        LEFT JOIN (
-            SELECT reservable_id, COUNT(*) AS cnt
-            FROM reservations
-            WHERE start_time <= NOW()
-              AND end_time > NOW()
-            GROUP BY reservable_id
-        ) active ON active.reservable_id = r.id
-        ${where}
-        ORDER BY f.floor_number, r.name`,
-        params
-    );
-
-    return rows;
-};
-
-    const findById = async (id: number): Promise<OfficeSlot | null> => {
+    const getAllReservables = async (): Promise<Reservable[]> => {
         const { rows } = await db.query(
-            `SELECT r.id, r.name, r.capacity, r.floor_id, r.is_blocked, f.name
-            AS floor_name, f.floor_number
-            FROM reservables r
-            JOIN floors f ON f.id = r.floor_id
-            WHERE r.id = ?`,
-            [id]
+            `SELECT id, name, capacity, floor_id, is_blocked FROM reservables ORDER BY id ASC`,
+            [],
         );
-        return rows.length ? rows[0] : null;
+        return rows.map((r) => ({ ...r, is_blocked: Boolean(r.is_blocked) })) as Reservable[];
     };
 
-    const findAvailable = async (startTime: string, endTime: string, filters: { floor_id?: number }): Promise<any[]> => {
-        const conditions: string[] = [];
-        const params: any[] = [toMysqlUtc(startTime), toMysqlUtc(endTime)];
-
-        if (filters.floor_id !== undefined) {
-            conditions.push("r.floor_id = ?");
-            params.push(filters.floor_id);
-        }
-
-        const extra = conditions.length ? `AND ${conditions.join(" AND ")}` : "";
-
+    const getReservableById = async (id: number): Promise<Reservable | null> => {
         const { rows } = await db.query(
-            `SELECT r.id, r.name, r.capacity, r.floor_id, r.is_blocked, f.name AS floor_name, f.floor_number,
-                COALESCE(active.cnt, 0) AS current_reservations,
-                (r.is_blocked = 0 AND COALESCE(active.cnt, 0) < r.capacity) AS is_available
-            FROM reservables r
-            JOIN floors f ON f.id = r.floor_id
-            LEFT JOIN (
-                SELECT reservable_id, COUNT(*) AS cnt
-                FROM reservations
-                WHERE start_time < ? AND end_time > ? GROUP BY reservable_id)
-            active ON active.reservable_id = r.id
-            WHERE 1=1 ${extra}
-            ORDER BY f.floor_number, r.name`,
-            params
-        );
-        return rows;
-    };
-
-    const findFriendOccupancy = async (slotIds: number[], userId: string, startTime: string, endTime: string): Promise<FriendOccupancy[]> => {
-        if (slotIds.length === 0) return [];
-
-        const placeholders = slotIds.map(() => "?").join(",");
-        const { rows } = await db.query(`
-            SELECT res.reservable_id AS slot_id, res.user_id, u.name AS user_name, res.start_time, res.end_time
-            FROM reservations res
-            JOIN users u ON u.e_id = res.user_id
-            WHERE res.reservable_id IN (${placeholders})
-            AND res.start_time < ? AND res.end_time > ? AND res.user_id IN (
-                SELECT CASE
-                    WHEN user_low = ? THEN user_high ELSE user_low END
-                FROM friendships
-                WHERE (user_low = ? OR user_high = ?)
-            )`,
-            [...slotIds, toMysqlUtc(startTime), toMysqlUtc(endTime), userId, userId, userId]
-        );
-        return rows as FriendOccupancy[];
-    };
-
-    const findWorkGroups = async (): Promise<WorkGroup[]> => {
-        const { rows } = await db.query(`
-            SELECT wg.id, wg.name, wg.description, COUNT(wgm.user_id) AS memberCount
-            FROM work_groups wg
-            LEFT JOIN work_group_members wgm ON wgm.work_group_id = wg.id
-            GROUP BY wg.id, wg.name, wg.description
-            ORDER BY wg.name
-        `);
-        return rows as WorkGroup[];
-    };
-
-    const findUsers = async (): Promise<UserSummary[]> => {
-        const { rows } = await db.query(`
-            SELECT u.e_id AS id, u.name, u.email, COALESCE(r.name, 'Usuario') AS role
-            FROM users u
-            LEFT JOIN roles r ON r.id = u.role_id
-            ORDER BY u.name
-        `);
-        return rows as UserSummary[];
-    };
-
-    const findGuests = async (): Promise<GuestSummary[]> => {
-        const { rows } = await db.query(`
-            SELECT id, name, email
-            FROM guests
-            ORDER BY name
-        `);
-        return rows as GuestSummary[];
-    };
-
-    const findWorkGroupMembers = async (workGroupIds: number[]): Promise<Array<{ work_group_id: number; user_id: string }>> => {
-        if (workGroupIds.length === 0) return [];
-        const placeholders = workGroupIds.map(() => "?").join(",");
-        const { rows } = await db.query(
-            `SELECT work_group_id, user_id
-             FROM work_group_members
-             WHERE work_group_id IN (${placeholders})`,
-            workGroupIds,
-        );
-        return rows as Array<{ work_group_id: number; user_id: string }>;
-    };
-
-    const findReservationsByReservable = async (reservableId: number): Promise<Array<{ id: number; reservable_id: number; start_time: string; end_time: string; can_overlap: number }>> => {
-        const { rows } = await db.query(
-            `SELECT id, reservable_id, DATE_FORMAT(start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                    DATE_FORMAT(end_time, '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                    can_overlap
-             FROM reservations
-             WHERE reservable_id = ?
-             ORDER BY start_time`,
-            [reservableId],
-        );
-        return rows as Array<{ id: number; reservable_id: number; start_time: string; end_time: string; can_overlap: number }>;
-    };
-
-    const findReservationById = async (reservationId: number): Promise<{ id: number; reservable_id: number; start_time: string; end_time: string; can_overlap: number; description: string } | null> => {
-        const { rows } = await db.query(
-            `SELECT id, reservable_id, DATE_FORMAT(start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                    DATE_FORMAT(end_time, '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                    can_overlap, description
-             FROM reservations
-             WHERE id = ?
-             LIMIT 1`,
-            [reservationId],
-        );
-        return rows.length ? rows[0] : null;
-    };
-
-    const findReservationWorkGroups = async (reservationIds: number[]): Promise<Array<{ reservationId: number; id: number; name: string; description: string | null }>> => {
-        if (reservationIds.length === 0) return [];
-        const placeholders = reservationIds.map(() => "?").join(",");
-        const { rows } = await db.query(
-            `SELECT rw.reservations_id AS reservationId, wg.id, wg.name, wg.description
-             FROM reservation_work_groups rw
-             JOIN work_groups wg ON wg.id = rw.work_groups_id
-             WHERE rw.reservations_id IN (${placeholders})`,
-            reservationIds,
-        );
-        return rows as Array<{ reservationId: number; id: number; name: string; description: string | null }>;
-    };
-
-    const findParticipantsByReservationIds = async (reservationIds: number[]): Promise<Array<{ id: number; reservationId: number; userId: string | null; guestId: number | null; ownershipPriority: number; checkedIn: number; status: string; user_name: string | null; user_email: string | null; user_role: string | null; guest_name: string | null; guest_email: string | null }>> => {
-        if (reservationIds.length === 0) return [];
-        const placeholders = reservationIds.map(() => "?").join(",");
-        const { rows } = await db.query(
-            `SELECT rp.id, rp.reservations_id AS reservationId, rp.user_id AS userId, rp.guest_id AS guestId,
-                    rp.ownership_priority AS ownershipPriority, rp.checked_in AS checkedIn, rp.status,
-                    u.name AS user_name, u.email AS user_email, r.name AS user_role,
-                    g.name AS guest_name, g.email AS guest_email
-             FROM reservation_participants rp
-             LEFT JOIN users u ON u.e_id = rp.user_id
-             LEFT JOIN roles r ON r.id = u.role_id
-             LEFT JOIN guests g ON g.id = rp.guest_id
-             WHERE rp.reservations_id IN (${placeholders})
-             ORDER BY rp.ownership_priority, rp.id`,
-            reservationIds,
-        );
-        return rows as Array<{ id: number; reservationId: number; userId: string | null; guestId: number | null; ownershipPriority: number; checkedIn: number; status: string; user_name: string | null; user_email: string | null; user_role: string | null; guest_name: string | null; guest_email: string | null }>;
-    };
-
-    const createReservation = async (reservableId: number, startTime: string, endTime: string, canOverlap: boolean, description: string): Promise<number> => {
-        const { insertId } = await db.execute(
-            `INSERT INTO reservations (reservable_id, start_time, end_time, can_overlap, description)
-             VALUES (?, ?, ?, ?, ?)`,
-            [reservableId, toMysqlUtc(startTime), toMysqlUtc(endTime), canOverlap ? 1 : 0, description],
-        );
-        return insertId!;
-    };
-
-    const addReservationWorkGroups = async (reservationId: number, workGroupIds: number[]): Promise<void> => {
-        if (workGroupIds.length === 0) return;
-        const values = workGroupIds.map(() => `(?, ?)`).join(", ");
-        const params: any[] = [];
-        workGroupIds.forEach((workGroupId) => {
-            params.push(reservationId, workGroupId);
-        });
-        await db.execute(
-            `INSERT INTO reservation_work_groups (reservations_id, work_groups_id) VALUES ${values}`,
-            params,
-        );
-    };
-
-    const addReservationParticipant = async (reservationId: number, userId: string | null, guestId: number | null, ownershipPriority: number, status: ParticipantStatus): Promise<number> => {
-        const { insertId } = await db.execute(
-            `INSERT INTO reservation_participants (reservations_id, user_id, guest_id, ownership_priority, checked_in, status)
-             VALUES (?, ?, ?, ?, 0, ?)`,
-            [reservationId, userId, guestId, ownershipPriority, status],
-        );
-        return insertId!;
-    };
-
-    const findParticipantById = async (participantId: number): Promise<{ id: number; reservationId: number; userId: string | null; guestId: number | null; ownershipPriority: number; checkedIn: number; status: string; user_name: string | null; user_email: string | null; user_role: string | null; guest_name: string | null; guest_email: string | null } | null> => {
-        const { rows } = await db.query(
-            `SELECT rp.id, rp.reservations_id AS reservationId, rp.user_id AS userId, rp.guest_id AS guestId,
-                    rp.ownership_priority AS ownershipPriority, rp.checked_in AS checkedIn, rp.status,
-                    u.name AS user_name, u.email AS user_email, r.name AS user_role,
-                    g.name AS guest_name, g.email AS guest_email
-             FROM reservation_participants rp
-             LEFT JOIN users u ON u.e_id = rp.user_id
-             LEFT JOIN roles r ON r.id = u.role_id
-             LEFT JOIN guests g ON g.id = rp.guest_id
-             WHERE rp.id = ?
-             LIMIT 1`,
-            [participantId],
-        );
-        return rows.length ? rows[0] : null;
-    };
-
-    const updateParticipantStatus = async (participantId: number, status: ParticipantStatus): Promise<boolean> => {
-        const { affectedCount } = await db.execute(
-            `UPDATE reservation_participants SET status = ? WHERE id = ?`,
-            [status, participantId],
-        );
-        return affectedCount > 0;
-    };
-
-    const create = async (data: CreateOfficeSlotBody): Promise<number> => {
-        const { insertId } = await db.execute(
-            `INSERT INTO reservables (name, capacity, floor_id, is_blocked) VALUES (?, ?, ?, 0)`,
-            [data.name, data.capacity, data.floor_id]
-        );
-        return insertId!;
-    };
-
-    const update = async (id: number, data: UpdateOfficeSlotBody): Promise<boolean> => {
-        const fields: string[] = [];
-        const params: any[] = [];
-
-        if (data.name !== undefined) {
-            fields.push("name = ?");
-            params.push(data.name);
-        }
-        if (data.capacity !== undefined) {
-            fields.push("capacity = ?");
-            params.push(data.capacity);
-        }
-        if (data.floor_id !== undefined) {
-            fields.push("floor_id = ?");
-            params.push(data.floor_id);
-        }
-
-        if (fields.length === 0) return false;
-        params.push(id);
-
-        const { affectedCount } = await db.execute(
-            `UPDATE reservables SET ${fields.join(", ")} WHERE id = ?`,
-            params
-        );
-        return affectedCount > 0;
-    };
-
-    const remove = async (id: number): Promise<boolean> => {
-        const { affectedCount } = await db.execute(
-            `DELETE FROM reservables WHERE id = ?`,
-            [id]
-        );
-        return affectedCount > 0;
-    };
-
-    const setBlocked = async (id: number, isBlocked: boolean): Promise<boolean> => {
-        const { affectedCount } = await db.execute(
-            `UPDATE reservables SET is_blocked = ? WHERE id = ?`,
-            [isBlocked ? 1 : 0, id]
-        );
-        return affectedCount > 0;
-    };
-
-    const floorExists = async (floorId: number): Promise<boolean> => {
-        const { rows } = await db.query(
-            `SELECT id FROM floors WHERE id = ? LIMIT 1`,
-            [floorId]
-        );
-        return rows.length > 0;
-    };
-
-    const findReservationsByUserId = async (userId: string): Promise<number[]> => {
-        const { rows } = await db.query(
-            `SELECT DISTINCT rp.reservations_id
-             FROM reservation_participants rp
-             WHERE rp.user_id = ? AND rp.ownership_priority = 0
-             ORDER BY rp.reservations_id`,
-            [userId],
-        );
-        return rows.map((row: any) => row.reservations_id);
-    };
-
-    const findReservationsByUserIds = async (userIds: string[]): Promise<number[]> => {
-        if (userIds.length === 0) return [];
-        const placeholders = userIds.map(() => "?").join(",");
-        const { rows } = await db.query(
-            `SELECT DISTINCT rp.reservations_id
-             FROM reservation_participants rp
-             WHERE rp.user_id IN (${placeholders}) AND rp.ownership_priority = 0
-             ORDER BY rp.reservations_id`,
-            userIds,
-        );
-        return rows.map((row: any) => row.reservations_id);
-    };
-
-    const findMyReservationSummaries = async (userId: string): Promise<UserReservationSummary> => {
-        const { rows } = await db.query(
-            `SELECT
-                 res.id,
-                 res.reservable_id,
-                 rv.name  AS reservable_name,
-                 f.id     AS floor_id,
-                 f.name   AS floor_name,
-                 DATE_FORMAT(res.start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                 DATE_FORMAT(res.end_time,   '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                 rp.checked_in,
-                 rp.status,
-                 u.name AS user_name
-             FROM reservation_participants rp
-             JOIN reservations res ON res.id          = rp.reservations_id
-             JOIN reservables  rv  ON rv.id           = res.reservable_id
-             JOIN floors       f   ON f.id            = rv.floor_id
-             JOIN users        u   ON u.e_id          = rp.user_id
-             WHERE rp.user_id = ?
-               AND rp.ownership_priority = 0
-             ORDER BY res.start_time`,
-            [userId],
-        );
-
-        return {
-            user_id: userId,
-            user_name: rows[0]?.user_name ?? "",
-            reservations: rows.map((r: any) => ({
-                id: r.id,
-                reservable_id: r.reservable_id,
-                reservable_name: r.reservable_name,
-                floor_id: r.floor_id,
-                floor_name: r.floor_name,
-                start_time: r.start_time,
-                end_time: r.end_time,
-                checked_in: Boolean(r.checked_in),
-                status: r.status,
-            })),
-        };
-    };
-
-    const findFriendsReservationSummaries = async (userIds: string[]): Promise<FriendReservationsSummary> => {
-        if (userIds.length === 0) return [];
-        const placeholders = userIds.map(() => "?").join(",");
-
-        const { rows } = await db.query(
-            `SELECT
-                 rp.user_id,
-                 u.name   AS user_name,
-                 res.id,
-                 res.reservable_id,
-                 rv.name  AS reservable_name,
-                 f.id     AS floor_id,
-                 f.name   AS floor_name,
-                 DATE_FORMAT(res.start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                 DATE_FORMAT(res.end_time,   '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                 rp.checked_in,
-                 rp.status
-             FROM reservation_participants rp
-             JOIN reservations res ON res.id  = rp.reservations_id
-             JOIN reservables  rv  ON rv.id   = res.reservable_id
-             JOIN floors       f   ON f.id    = rv.floor_id
-             JOIN users        u   ON u.e_id  = rp.user_id
-             WHERE rp.user_id IN (${placeholders})
-               AND rp.ownership_priority = 0
-             ORDER BY rp.user_id, res.start_time`,
-            userIds,
-        );
-
-        const map = new Map<string, UserReservationSummary>();
-        for (const r of rows as any[]) {
-            if (!map.has(r.user_id)) {
-                map.set(r.user_id, { user_id: r.user_id, user_name: r.user_name, reservations: [] });
-            }
-            map.get(r.user_id)!.reservations.push({
-                id: r.id,
-                reservable_id: r.reservable_id,
-                reservable_name: r.reservable_name,
-                floor_id: r.floor_id,
-                floor_name: r.floor_name,
-                start_time: r.start_time,
-                end_time: r.end_time,
-                checked_in: Boolean(r.checked_in),
-                status: r.status,
-            });
-        }
-        return Array.from(map.values());
-    };
-
-    // ─── Events ─────────────────────────────────────────────────────────────────
-
-    /**
-     * Returns all overlapping reservations where can_overlap = 0 for a given
-     * reservable and time window. Intended to be called inside a transaction.
-     */
-    const findOverlappingReservations = async (
-        reservableId: number,
-        startTime: string,
-        endTime: string,
-    ): Promise<Array<{ id: number }>> => {
-        const { rows } = await db.query(
-            `SELECT id
-             FROM reservations
-             WHERE reservable_id = ?
-               AND can_overlap = 0
-               AND start_time < ?
-               AND end_time   > ?`,
-            [reservableId, toMysqlUtc(endTime), toMysqlUtc(startTime)],
-        );
-        return rows as Array<{ id: number }>;
-    };
-
-    /**
-     * Returns all events that overlap with the given time window for a
-     * reservable. Intended to be called inside a transaction.
-     */
-    const findOverlappingEvents = async (
-        reservableId: number,
-        startTime: string,
-        endTime: string,
-    ): Promise<Array<{ id: number }>> => {
-        const { rows } = await db.query(
-            `SELECT id
-             FROM events
-             WHERE reservable_id = ?
-               AND start_time < ?
-               AND end_time   > ?`,
-            [reservableId, toMysqlUtc(endTime), toMysqlUtc(startTime)],
-        );
-        return rows as Array<{ id: number }>;
-    };
-
-    const findEvents = async (query: GetEventsQuery): Promise<Event[]> => {
-        const conditions: string[] = [];
-        const params: any[] = [];
-
-        if (query.reservable_id !== undefined) {
-            conditions.push("e.reservable_id = ?");
-            params.push(query.reservable_id);
-        }
-        if (query.floor_id !== undefined) {
-            conditions.push("rv.floor_id = ?");
-            params.push(query.floor_id);
-        }
-        if (query.start_time !== undefined) {
-            conditions.push("e.end_time > ?");
-            params.push(toMysqlUtc(query.start_time));
-        }
-        if (query.end_time !== undefined) {
-            conditions.push("e.start_time < ?");
-            params.push(toMysqlUtc(query.end_time));
-        }
-
-        const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-
-        const { rows } = await db.query(
-            `SELECT
-                 e.id,
-                 e.title,
-                 e.description,
-                 DATE_FORMAT(e.start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                 DATE_FORMAT(e.end_time,   '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                 rv.id          AS reservable_id,
-                 rv.name        AS reservable_name,
-                 rv.capacity    AS reservable_capacity,
-                 rv.floor_id    AS reservable_floor_id,
-                 f.name         AS floor_name,
-                 f.floor_number AS floor_number
-             FROM events e
-             LEFT JOIN reservables rv ON rv.id = e.reservable_id
-             LEFT JOIN floors      f  ON f.id  = rv.floor_id
-             ${where}
-             ORDER BY e.start_time`,
-            params,
-        );
-
-        return rows.map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            description: r.description,
-            start_time: r.start_time,
-            end_time: r.end_time,
-            reservable: r.reservable_id != null ? {
-                id: r.reservable_id,
-                name: r.reservable_name,
-                capacity: r.reservable_capacity,
-                floor_id: r.reservable_floor_id,
-                floor_name: r.floor_name,
-                floor_number: r.floor_number,
-            } : null,
-        })) as Event[];
-    };
-
-    const createEvent = async (data: CreateEventBody): Promise<number> => {
-        const { insertId } = await db.execute(
-            `INSERT INTO events (title, description, reservable_id, start_time, end_time)
-             VALUES (?, ?, ?, ?, ?)`,
-            [data.title, data.description, data.reservable_id ?? null, toMysqlUtc(data.start_time), toMysqlUtc(data.end_time)],
-        );
-        return insertId!;
-    };
-
-    const findEventById = async (id: number): Promise<Event | null> => {
-        const { rows } = await db.query(
-            `SELECT
-                 e.id,
-                 e.title,
-                 e.description,
-                 DATE_FORMAT(e.start_time, '%Y-%m-%dT%H:%i:%sZ') AS start_time,
-                 DATE_FORMAT(e.end_time,   '%Y-%m-%dT%H:%i:%sZ') AS end_time,
-                 rv.id          AS reservable_id,
-                 rv.name        AS reservable_name,
-                 rv.capacity    AS reservable_capacity,
-                 rv.floor_id    AS reservable_floor_id,
-                 f.name         AS floor_name,
-                 f.floor_number AS floor_number
-             FROM events e
-             LEFT JOIN reservables rv ON rv.id = e.reservable_id
-             LEFT JOIN floors      f  ON f.id  = rv.floor_id
-             WHERE e.id = ?
-             LIMIT 1`,
+            `SELECT id, name, capacity, floor_id, is_blocked FROM reservables WHERE id = ?`,
             [id],
         );
         if (!rows.length) return null;
         const r = rows[0];
+        return { ...r, is_blocked: Boolean(r.is_blocked) } as Reservable;
+    };
+
+    const createReservable = async (data: Omit<Reservable, 'id'>): Promise<Reservable | null> => {
+        const { insertId } = await db.execute(
+            `INSERT INTO reservables (name, capacity, floor_id, is_blocked) VALUES (?, ?, ?, ?)`,
+            [data.name, data.capacity, data.floor_id, data.is_blocked ? 1 : 0],
+        );
+        if (!insertId) return null;
+        return getReservableById(insertId);
+    };
+
+    const updateReservable = async (
+        id: number,
+        fields: Partial<Omit<Reservable, 'id'>>,
+    ): Promise<Reservable | null> => {
+        const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
+        if (!entries.length) return getReservableById(id);
+
+        const setClauses = entries.map(([col]) => `${col} = ?`).join(', ');
+        const values = entries.map(([, v]) => v);
+
+        const { affectedCount } = await db.execute(
+            `UPDATE reservables SET ${setClauses} WHERE id = ?`,
+            [...values, id],
+        );
+        if (affectedCount === 0) return null;
+        return getReservableById(id);
+    };
+
+    const deleteReservable = async (id: number): Promise<boolean> => {
+        const { affectedCount } = await db.execute(`DELETE FROM reservables WHERE id = ?`, [id]);
+        return affectedCount > 0;
+    };
+
+    // Reservations
+
+    const RESERVATION_FIELDS = `
+        r.id, r.reservable_id, r.category, r.start_time, r.end_time,
+        r.description, r.attendance_status, r.created_at, r.updated_at
+    `;
+
+    const getReservationById = async (id: number): Promise<Reservation | null> => {
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS} FROM reservations r WHERE r.id = ?`,
+            [id],
+        );
+        if (!rows.length) return null;
+        return hydrateReservation(rows[0] as ReservationRow);
+    };
+
+    const getParticipantsByReservation = async (reservationId: number): Promise<Participant[]> => {
+        const { rows } = await db.query(
+            `SELECT id, reservations_id, user_id, ownership_priority, attendance_status,
+                    created_at, updated_at
+             FROM reservation_participants
+             WHERE reservations_id = ?
+             ORDER BY ownership_priority ASC, id ASC`,
+            [reservationId],
+        );
+        return rows as Participant[];
+    };
+
+    const getReservationWithParticipants = async (
+        id: number,
+    ): Promise<ReservationWithParticipants | null> => {
+        const reservation = await getReservationById(id);
+        if (!reservation) return null;
+
+        const reservable = await getReservableById(reservation.reservable_id);
+        if (!reservable) return null;
+
+        const participants = await getParticipantsByReservation(id);
+
         return {
-            id: r.id,
-            title: r.title,
-            description: r.description,
-            start_time: r.start_time,
-            end_time: r.end_time,
-            reservable: r.reservable_id != null ? {
-                id: r.reservable_id,
-                name: r.reservable_name,
-                capacity: r.reservable_capacity,
-                floor_id: r.reservable_floor_id,
-                floor_name: r.floor_name,
-                floor_number: r.floor_number,
-            } : null,
+            ...reservation,
+            reservable,
+            participants,
         };
     };
 
+    const listReservations = async (
+        query: ListReservationsQuery,
+        callerEId: string,
+        friendIds: string[],
+    ): Promise<ListReservationsPage> => {
+        const conditions: string[] = [];
+        const params: any[] = [];
+        const decodedCursor = query.cursor
+            ? Cursor.decode(query.cursor, ListReservationsCursorSchema)
+            : null;
+
+        if (query.reservable_id) {
+            conditions.push('r.reservable_id = ?');
+            params.push(query.reservable_id);
+        }
+        if (query.start_time) {
+            conditions.push('r.end_time > ?');
+            params.push(query.start_time);
+        }
+        if (query.end_time) {
+            conditions.push('r.start_time < ?');
+            params.push(query.end_time);
+        }
+        if (query.attendance_status) {
+            conditions.push('r.attendance_status = ?');
+            params.push(query.attendance_status);
+        }
+        if (query.user_id) {
+            conditions.push(
+                'EXISTS (SELECT 1 FROM reservation_participants rp WHERE rp.reservations_id = r.id AND rp.user_id = ?)',
+            );
+            params.push(query.user_id);
+        }
+        if (decodedCursor) {
+            conditions.push('r.id > ?');
+            params.push(decodedCursor.lastId);
+        }
+
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const hasLimit = query.limit !== undefined;
+        const limit = query.limit ?? 50;
+
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS}
+             FROM reservations r
+             ${where}
+             ORDER BY r.id ASC
+             LIMIT ?`,
+            [...params, limit + 1],
+        );
+
+        const reservations = (rows as ReservationRow[]).map(hydrateReservation);
+        const hasMore = reservations.length > limit;
+        const pageItems = hasMore ? reservations.slice(0, limit) : reservations;
+
+        const allFriendSet = new Set([callerEId, ...friendIds]);
+        const items: ReservationWithParticipants[] = await Promise.all(
+            pageItems.map(async (res) => {
+                const reservable = (await getReservableById(res.reservable_id))!;
+                const rawParticipants = await getParticipantsByReservation(res.id);
+                const participants = rawParticipants.map((p) =>
+                    allFriendSet.has(p.user_id)
+                        ? p
+                        : {
+                            ...p,
+                            user_id: null,
+                            attendance_status: null,
+                            ownership_priority: null,
+                        },
+                );
+                return { ...res, reservable, participants };
+            }),
+        );
+
+        const nextCursor =
+            hasMore && items.length > 0
+                ? Cursor.encode({ lastId: items[items.length - 1].id })
+                : null;
+
+        return { items, nextCursor };
+    };
+
+    const getReservationsByUser = async (
+        userId: string,
+    ): Promise<ReservationWithParticipants[]> => {
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS}
+             FROM reservations r
+             INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
+             WHERE rp.user_id = ?
+             ORDER BY r.start_time DESC`,
+            [userId],
+        );
+        const reservations = (rows as ReservationRow[]).map(hydrateReservation);
+
+        return Promise.all(
+            reservations.map(async (res) => {
+                const reservable = (await getReservableById(res.reservable_id))!;
+                const participants = await getParticipantsByReservation(res.id);
+                return { ...res, reservable, participants };
+            }),
+        );
+    };
+
+    const createReservationBatch = async (
+        creatorId: string,
+        reservableId: number,
+        category: string,
+        description: string,
+        timestamps: Array<{ start_time: Date; end_time: Date }>,
+        participantIds: string[],
+    ): Promise<ReservationWithParticipants[]> => {
+        const created: ReservationWithParticipants[] = [];
+
+        for (const ts of timestamps) {
+            const { insertId: reservationId } = await db.execute(
+                `INSERT INTO reservations (reservable_id, category, start_time, end_time, description, attendance_status)
+                 VALUES (?, ?, ?, ?, ?, 'NOT_ARRIVED')`,
+                [reservableId, category, ts.start_time, ts.end_time, description],
+            );
+            if (!reservationId) continue;
+
+            // El creador recibe priority 0 solo si está en la lista de participantes.
+            // Si no está, se inserta con prioridades incrementales sin reservar el 0.
+            const creatorIsParticipant = participantIds.includes(creatorId);
+            let priority = creatorIsParticipant ? 1 : 0;
+
+            const allParticipants: Array<{ userId: string; priority: number; status: string }> = [];
+
+            if (creatorIsParticipant) {
+                allParticipants.push({ userId: creatorId, priority: 0, status: "NOT_ARRIVED" });
+            }
+
+            for (const pid of participantIds) {
+                if (pid === creatorId) continue; // ya fue agregado arriba con priority 0
+                allParticipants.push({ userId: pid, priority, status: "INVITED" });
+                priority++;
+            }
+
+            for (const p of allParticipants) {
+                await db.execute(
+                    `INSERT INTO reservation_participants
+                    (reservations_id, user_id, ownership_priority, attendance_status)
+                 VALUES (?, ?, ?, ?)`,
+                    [reservationId, p.userId, p.priority, p.status],
+                );
+            }
+
+            const full = await getReservationWithParticipants(reservationId);
+            if (full) created.push(full);
+        }
+
+        return created;
+    };
+
+    const cancelReservation = async (id: number): Promise<Reservation | null> => {
+        const { affectedCount } = await db.execute(
+            `UPDATE reservations SET attendance_status = 'CANCELED' WHERE id = ?`,
+            [id],
+        );
+        if (affectedCount === 0) return null;
+        return getReservationById(id);
+    };
+
+    const updateReservationAttendance = async (
+        id: number,
+        status: ReservationAttendanceStatus,
+    ): Promise<Reservation | null> => {
+        const { affectedCount } = await db.execute(
+            `UPDATE reservations SET attendance_status = ? WHERE id = ?`,
+            [status, id],
+        );
+        if (affectedCount === 0) return null;
+        return getReservationById(id);
+    };
+
+    // Participants
+
+    const getParticipantById = async (participantId: number): Promise<Participant | null> => {
+        const { rows } = await db.query(
+            `SELECT id, reservations_id, user_id, ownership_priority, attendance_status,
+                    created_at, updated_at
+             FROM reservation_participants WHERE id = ?`,
+            [participantId],
+        );
+        return rows.length ? (rows[0] as Participant) : null;
+    };
+
+    const getParticipantByReservationAndUser = async (
+        reservationId: number,
+        userId: string,
+    ): Promise<Participant | null> => {
+        const { rows } = await db.query(
+            `SELECT id, reservations_id, user_id, ownership_priority, attendance_status,
+                    created_at, updated_at
+             FROM reservation_participants
+             WHERE reservations_id = ? AND user_id = ?`,
+            [reservationId, userId],
+        );
+        return rows.length ? (rows[0] as Participant) : null;
+    };
+
+    const updateParticipantAttendance = async (
+        participantId: number,
+        status: ParticipantAttendanceStatus,
+    ): Promise<Participant | null> => {
+        const { affectedCount } = await db.execute(
+            `UPDATE reservation_participants SET attendance_status = ? WHERE id = ?`,
+            [status, participantId],
+        );
+        if (affectedCount === 0) return null;
+        return getParticipantById(participantId);
+    };
+
+    // Queue
+
+    const markNoShowForReservation = async (
+        reservationId: number,
+    ): Promise<
+        | { marked: true; reservation: Reservation; participants: Participant[] }
+        | { marked: false; reason: string }
+    > => {
+        const { affectedCount } = await db.execute(
+            `UPDATE reservations
+             SET attendance_status = 'NO_SHOW'
+             WHERE id = ? AND attendance_status = 'NOT_ARRIVED'`,
+            [reservationId],
+        );
+
+        if (affectedCount === 0) {
+            const existing = await getReservationById(reservationId);
+            if (!existing) return { marked: false, reason: 'Reservación no encontrada' };
+            return { marked: false, reason: `Estado actual: ${existing.attendance_status}` };
+        }
+
+        await db.execute(
+            `UPDATE reservation_participants
+             SET attendance_status = 'NOT_ACCEPTED'
+             WHERE reservations_id = ? AND attendance_status = 'INVITED'`,
+            [reservationId],
+        );
+        await db.execute(
+            `UPDATE reservation_participants
+             SET attendance_status = 'NO_SHOW'
+             WHERE reservations_id = ? AND attendance_status = 'NOT_ARRIVED'`,
+            [reservationId],
+        );
+
+        const reservation = await getReservationById(reservationId);
+        if (!reservation) return { marked: false, reason: 'No se pudo releer la reservación' };
+
+        const participants = await getParticipantsByReservation(reservationId);
+        return { marked: true, reservation, participants };
+    };
+
+    const markCheckoutForReservation = async (
+        reservationId: number,
+    ): Promise<
+        | {
+            action: 'checked_out' | 'no_show_fallback';
+            reservation: Reservation;
+            participants: Participant[];
+        }
+        | { action: 'skipped'; reason: string }
+    > => {
+        const checkoutResult = await db.execute(
+            `UPDATE reservations
+             SET attendance_status = 'CHECKED_OUT',
+                 updated_at        = end_time
+             WHERE id = ? AND attendance_status = 'CHECKED_IN'`,
+            [reservationId],
+        );
+
+        if (checkoutResult.affectedCount > 0) {
+            await db.execute(
+                `UPDATE reservation_participants
+                 SET attendance_status = 'CHECKED_OUT'
+                 WHERE reservations_id = ? AND attendance_status = 'CHECKED_IN'`,
+                [reservationId],
+            );
+            await db.execute(
+                `UPDATE reservation_participants
+                 SET attendance_status = 'NO_SHOW'
+                 WHERE reservations_id = ? AND attendance_status = 'NOT_ARRIVED'`,
+                [reservationId],
+            );
+            await db.execute(
+                `UPDATE reservation_participants
+                 SET attendance_status = 'NOT_ACCEPTED'
+                 WHERE reservations_id = ? AND attendance_status = 'INVITED'`,
+                [reservationId],
+            );
+
+            const reservation = await getReservationById(reservationId);
+            if (!reservation)
+                return { action: 'skipped', reason: 'No se pudo releer tras checkout' };
+
+            const participants = await getParticipantsByReservation(reservationId);
+            return { action: 'checked_out', reservation, participants };
+        }
+
+        const noShowResult = await db.execute(
+            `UPDATE reservations
+             SET attendance_status = 'NO_SHOW',
+                 updated_at        = end_time
+             WHERE id = ? AND attendance_status = 'NOT_ARRIVED'`,
+            [reservationId],
+        );
+
+        if (noShowResult.affectedCount > 0) {
+            await db.execute(
+                `UPDATE reservation_participants
+                 SET attendance_status = 'NOT_ACCEPTED'
+                 WHERE reservations_id = ? AND attendance_status = 'INVITED'`,
+                [reservationId],
+            );
+            await db.execute(
+                `UPDATE reservation_participants
+                 SET attendance_status = 'NO_SHOW'
+                 WHERE reservations_id = ? AND attendance_status = 'NOT_ARRIVED'`,
+                [reservationId],
+            );
+
+            const reservation = await getReservationById(reservationId);
+            if (!reservation)
+                return { action: 'skipped', reason: 'No se pudo releer tras no-show fallback' };
+
+            const participants = await getParticipantsByReservation(reservationId);
+            return { action: 'no_show_fallback', reservation, participants };
+        }
+
+        const existing = await getReservationById(reservationId);
+        return {
+            action: 'skipped',
+            reason: existing
+                ? `Ya en estado terminal: ${existing.attendance_status}`
+                : 'Reservación no encontrada',
+        };
+    };
+
+    const getPendingNoShowReservations = async (
+        checkinToleranceMinutes: number,
+    ): Promise<Array<Pick<Reservation, 'id' | 'start_time'>>> => {
+        const { rows } = await db.query(
+            `SELECT id, start_time
+             FROM reservations
+             WHERE attendance_status = 'NOT_ARRIVED'
+               AND DATE_ADD(start_time, INTERVAL ? MINUTE) > NOW()`,
+            [checkinToleranceMinutes],
+        );
+        return rows as Array<Pick<Reservation, 'id' | 'start_time'>>;
+    };
+
+    const getPendingCheckoutReservations = async (): Promise<
+        Array<Pick<Reservation, 'id' | 'end_time'>>
+    > => {
+        const { rows } = await db.query(
+            `SELECT id, end_time
+             FROM reservations
+             WHERE attendance_status = 'CHECKED_IN'
+               AND end_time > NOW()`,
+            [],
+        );
+        return rows as Array<Pick<Reservation, 'id' | 'end_time'>>;
+    };
+
     return {
-        findAll,
-        findById,
-        findAvailable,
-        findFriendOccupancy,
-        findWorkGroups,
-        findUsers,
-        findGuests,
-        findWorkGroupMembers,
-        create,
-        update,
-        remove,
-        setBlocked,
-        floorExists,
-        findReservationsByReservable,
-        findReservationById,
-        findReservationWorkGroups,
-        findParticipantsByReservationIds,
-        createReservation,
-        addReservationWorkGroups,
-        addReservationParticipant,
-        findParticipantById,
-        updateParticipantStatus,
-        findReservationsByUserId,
-        findReservationsByUserIds,
-        findMyReservationSummaries,
-        findFriendsReservationSummaries,
-        findOverlappingReservations,
-        findOverlappingEvents,
-        findEvents,
-        createEvent,
-        findEventById,
+        getAllReservables,
+        getReservableById,
+        createReservable,
+        updateReservable,
+        deleteReservable,
+
+        getReservationById,
+        getReservationWithParticipants,
+        listReservations,
+        getReservationsByUser,
+
+        createReservationBatch,
+        cancelReservation,
+        updateReservationAttendance,
+
+        getParticipantById,
+        getParticipantByReservationAndUser,
+        getParticipantsByReservation,
+        updateParticipantAttendance,
+
+        markNoShowForReservation,
+        markCheckoutForReservation,
+        getPendingNoShowReservations,
+        getPendingCheckoutReservations,
     };
 }

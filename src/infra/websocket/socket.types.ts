@@ -8,6 +8,8 @@ import type {
     ParkingReservation,
     ParkingLot,
 } from "../../modules/parking-slots/parking-slots.schema.js";
+import type { OfficeUpdateMessage } from "../../infra/websocket/broadcasters/office-events.broadcaster.js";
+export type { OfficeUpdateMessage };
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 //
@@ -29,12 +31,13 @@ export type RoomName =
     | `team:${string}`
     | `teamMembers:${string}`
     | "parking"
+    | "office"
     | "admin";
 
 /** Payload público de reserva (sin user_id) para el canal "parking" */
 export type ParkingReservationPublic = Pick<
     ParkingReservation,
-    "id" | "start_time" | "end_time" | "lifecycle_status" | "attendance_status" | "allocation_state" | "updated_at"
+    "id" | "start_time" | "end_time" | "lifecycle_status" | "attendance_status" | "updated_at"
 >;
 
 /** Payload público de lot */
@@ -76,7 +79,8 @@ export type TeamMembersUpdate =
 export type AdminUpdateMessage =
     | { domain: "parking"; event: ParkingUpdateMessage }
     | { domain: "user"; event: UserUpdateMessage | { type: "user.created"; payload: User } | { type: "guest.created"; payload: Guest } | { type: "guest.updated"; payload: Guest } | { type: "guest.deleted"; payload: { guestId: number } } }
-    | { domain: "team"; event: TeamMembersUpdate | { type: "team.created"; payload: TeamMembers } | { type: "team.deleted"; payload: { teamId: number } } };
+    | { domain: "team"; event: TeamMembersUpdate | { type: "team.created"; payload: TeamMembers } | { type: "team.deleted"; payload: { teamId: number } } }
+    | { domain: "office"; event: OfficeUpdateMessage };
 
 // ─── Socket event maps ────────────────────────────────────────────────────────
 
@@ -90,6 +94,7 @@ export interface ServerToClientEvents {
     teamMembersUpdate: (data: TeamMembersUpdate) => void;
 
     parkingUpdate: (data: ParkingUpdateMessage) => void;
+    officeUpdate: (data: OfficeUpdateMessage) => void;
 
     adminUpdate: (data: AdminUpdateMessage) => void;
 }
@@ -101,6 +106,8 @@ export interface ClientToServerEvents {
 
     joinParkingRoom: () => void;
     leaveParkingRoom: () => void;
+    joinOfficeRoom: () => void;
+    leaveOfficeRoom: () => void;
 
     joinFriendsRoom: () => void;
     leaveFriendsRoom: () => void;

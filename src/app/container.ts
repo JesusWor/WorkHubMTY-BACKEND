@@ -3,6 +3,7 @@ import { makeNotificationsRouter, makeNotificationsController, makeNotifications
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
 import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from "../modules/user/index.js";
 import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
+import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import {
     makeAchievementsRepo,
@@ -11,14 +12,16 @@ import {
     makeAchievementsRouter,
     initAchievementsListeners,
 } from "../modules/achievements/index.js";
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
+import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
+
 import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
-import { parkingQueue } from "../infra/queue/parking-queue.js";
-import { parkingEvents } from "../infra/events/parking-events.emitter.js";
-import { initParkingBroadcaster, initTeamBroadcaster, initUserBroadcaster } from "../infra/websocket/index.js";
-import { createParkingWorker } from "../infra/queue/parking-worker.js";
-import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
+
+import { officeEvents, parkingEvents, teamEvents, userEvents } from "../infra/events/index.js";
+import { initOfficeBroadcaster, initParkingBroadcaster, initTeamBroadcaster, initUserBroadcaster } from "../infra/websocket/index.js";
+import { createOfficeWorker, createParkingWorker, officeQueue, parkingQueue } from "../infra/queue/index.js";
+
+
 export function buildContainer() {
     const db = createDb();
     db.testConnection();
@@ -57,13 +60,14 @@ export function buildContainer() {
     const authRouter = makeAuthRouter(authController);
 
     const officeSlotsRepo = makeOfficeSlotsRepo(db);
-    const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
+    const officeSlotsService = makeOfficeSlotsService({
+        repo: officeSlotsRepo,
+        friendshipService,
+        queue: officeQueue,
+        emitter: officeEvents,
+    });
     const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
     const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
-    const reservablesRouter = makeReservablesRouter(officeSlotsController);
-    const reservationsRouter = makeReservationsRouter(officeSlotsController);
-    const eventsRouter = makeEventsRouter(officeSlotsController);
-    const workGroupsRouter = makeWorkGroupsRouter(officeSlotsController);
 
     const parkingSlotsRepo = makeParkingSlotsRepo(db);
     const parkingSlotsService = makeParkingSlotsService({
@@ -76,11 +80,17 @@ export function buildContainer() {
     const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
 
     // Broadcaster: escucha eventos del emitter y los manda por WebSocket
+    initOfficeBroadcaster();
     initParkingBroadcaster();
     initTeamBroadcaster();
     initUserBroadcaster();
 
     // Worker BullMQ: procesa los delayed jobs de no-show
+    const officeWorker = createOfficeWorker({
+        markNoShowForReservation: (id) => officeSlotsRepo.markNoShowForReservation(id),
+        markCheckoutForReservation: (id) => officeSlotsRepo.markCheckoutForReservation(id),
+        getReservableById: (id) => officeSlotsRepo.getReservableById(id),
+    });
     const parkingWorker = createParkingWorker({
         markNoShowForReservation: (id) => parkingSlotsRepo.markNoShowForReservation(id),
         markCheckoutForReservation: (id) => parkingSlotsRepo.markCheckoutForReservation(id),
@@ -107,10 +117,8 @@ export function buildContainer() {
         achievementsRouter,
         achievementsService,
         officeSlotsRouter,
-        reservablesRouter,
-        reservationsRouter,
-        eventsRouter,
-        workGroupsRouter,
+        officeWorker,
+        officeSlotsRepo,
         teamsRouter,
         parkingSlotsRouter,
         parkingSlotsRepo,

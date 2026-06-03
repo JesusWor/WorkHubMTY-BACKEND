@@ -15,7 +15,6 @@ function toPublicReservation(r: ParkingReservation): ParkingReservationPublic {
         end_time: r.end_time,
         lifecycle_status: r.lifecycle_status,
         attendance_status: r.attendance_status,
-        allocation_state: r.allocation_state,
         updated_at: r.updated_at,
     };
 }

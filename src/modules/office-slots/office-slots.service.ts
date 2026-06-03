@@ -1,432 +1,558 @@
-import { OfficeSlotsRepo } from "./office-slots.repo.js";
+import { OfficeSlotsRepo } from './office-slots.repo.js';
+import { FriendshipService } from '../friendship/friendship.service.js';
 import {
-    OfficeSlot,
-    CreateOfficeSlotBody,
-    UpdateOfficeSlotBody,
-    BlockSlotBody,
-    AvailableOfficeSlotsQuery,
-    SlotAvailabilityResult,
-    FriendOccupancy,
-    CreateReservationBatchBody,
-    ReservationDetail,
-    ReservationParticipant,
-    WorkGroup,
-    UserSummary,
-    GuestSummary,
-    ParticipantStatus,
-    UserReservationSummary,
-    FriendReservationsSummary,
-    Event,
-    CreateEventBody,
-    GetEventsQuery,
-} from "./office-slots.schema.js";
-import { ConflictError, NotFoundError, UnprocessableError } from "../../shared/errors/AppError.js";
-import { FriendshipService } from "../friendship/friendship.service.js";
-import { UserService } from "../user/user.service.js";
+    Reservable,
+    Reservation,
+    Participant,
+    ParticipantPublic,
+    ReservationWithParticipants,
+    ReservationAttendanceStatus,
+    ParticipantAttendanceStatus,
+    CreateReservable,
+    UpdateReservable,
+    CreateReservationBatch,
+    ListReservationsQuery,
+    ListReservationsPage,
+    RESERVATION_TRANSITIONS,
+    NON_CANCELABLE_STATUSES,
+    PARTICIPANT_USER_TRANSITIONS,
+} from './office-slots.schema.js';
+import {
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+} from '../../shared/errors/AppError.js';
+import { JwtPayload } from '../../shared/schemas/auth.schema.js';
+import { Roles } from '../../shared/types/role.type.js';
+import { Queue } from 'bullmq';
+import { OfficeNoShowJobData, OfficeCheckoutJobData } from '../../infra/queue/office-queue.js';
+import { OfficeEventsEmitter } from '../../infra/events/office-events.emitter.js';
 
-export type OfficeSlotsService = {
-    getAvailableSlots: (query: AvailableOfficeSlotsQuery) => Promise<SlotAvailabilityResult[]>;
-    getAllSlots: (filters: { floor_id?: number }) => Promise<any[]>;
-    getSlotById: (id: number) => Promise<OfficeSlot>;
-    createSlot: (data: CreateOfficeSlotBody) => Promise<OfficeSlot>;
-    updateSlot: (id: number, data: UpdateOfficeSlotBody) => Promise<OfficeSlot>;
-    deleteSlot: (id: number) => Promise<{ message: string }>;
-    setBlockStatus: (id: number, body: BlockSlotBody) => Promise<OfficeSlot>;
-    getWorkGroups: () => Promise<WorkGroup[]>;
-    getUsers: () => Promise<UserSummary[]>;
-    getGuests: () => Promise<GuestSummary[]>;
-    getReservationDetail: (id: number) => Promise<ReservationDetail>;
-    createReservationBatch: (data: CreateReservationBatchBody, currentUserId?: string) => Promise<ReservationDetail[]>;
-    updateParticipantStatus: (participantId: number, status: ParticipantStatus, reinvite?: boolean) => Promise<ReservationParticipant>;
-    getMyReservations: (userId: string) => Promise<UserReservationSummary>;
-    getMyFriendsReservations: (userId: string) => Promise<FriendReservationsSummary>;
-    // ─── Events ───────────────────────────────────────────────────────────────────
-    getEvents: (query: GetEventsQuery) => Promise<Event[]>;
-    getEventById: (id: number) => Promise<Event>;
-    createEvent: (data: CreateEventBody) => Promise<Event>;
+const CHECKIN_TOLERANCE_MINUTES = 30;
+
+// Queue helpers
+
+function noShowJobId(reservationId: number): string {
+    return `office-noshow-${reservationId}`;
+}
+
+function checkoutJobId(reservationId: number): string {
+    return `office-checkout-${reservationId}`;
+}
+
+function noShowDelay(startTime: Date): number {
+    const triggerAt = startTime.getTime() + CHECKIN_TOLERANCE_MINUTES * 60_000;
+    return Math.max(0, triggerAt - Date.now());
+}
+
+function checkoutDelay(endTime: Date): number {
+    return Math.max(0, endTime.getTime() - Date.now());
+}
+
+// State machine assertions
+
+function assertValidReservationTransition(
+    current: ReservationAttendanceStatus,
+    next: ReservationAttendanceStatus,
+): void {
+    const allowed = RESERVATION_TRANSITIONS[current] ?? [];
+    if (!allowed.includes(next)) {
+        throw new ConflictError(`Transición de reservación inválida: ${current} → ${next}`);
+    }
+}
+
+function assertValidParticipantTransition(
+    current: ParticipantAttendanceStatus,
+    next: ParticipantAttendanceStatus,
+): void {
+    const allowed = PARTICIPANT_USER_TRANSITIONS[current] ?? [];
+    if (!allowed.includes(next)) {
+        throw new ConflictError(`Transición de participante inválida: ${current} → ${next}`);
+    }
+}
+
+const PARTICIPANT_TERMINAL_STATUSES: ParticipantAttendanceStatus[] = [
+    "CHECKED_OUT",
+    "NO_SHOW",
+    "NOT_ACCEPTED",
+    "REJECTED",
+    "CANCELED",
+];
+
+// Friendship masking
+
+function maskParticipant(p: Participant, isFriend: boolean): ParticipantPublic {
+    if (isFriend) return p;
+    return {
+        id: p.id,
+        reservations_id: p.reservations_id,
+        user_id: null,
+        ownership_priority: null,
+        attendance_status: null,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+    };
+}
+
+function maskParticipants(
+    participants: Participant[],
+    callerEId: string,
+    friendSet: Set<string>,
+): ParticipantPublic[] {
+    return participants.map((p) => (friendSet.has(p.user_id) ? p : maskParticipant(p, false)));
+}
+
+export type OfficeSlotsServiceDeps = {
+    repo: OfficeSlotsRepo;
+    friendshipService: FriendshipService;
+    queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData>;
+    emitter: OfficeEventsEmitter;
 };
 
-export function makeOfficeSlotsService(repo: OfficeSlotsRepo, friendshipService?: FriendshipService, userService?: UserService): OfficeSlotsService {
-    // FEATURE 1: OFFICE SLOTS (Espacios de trabajo)
-    const toHourMinute = (iso: string): string => {
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return iso;
-        return d.toISOString().slice(11, 16);
+export type OfficeSlotsService = {
+    // Reservables
+    getAllReservables: () => Promise<Reservable[]>;
+    getReservableById: (id: number) => Promise<Reservable>;
+    createReservable: (data: CreateReservable) => Promise<Reservable>;
+    updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
+    deleteReservable: (id: number) => Promise<void>;
+
+    // Reservations
+    listReservations: (
+        query: ListReservationsQuery,
+        caller: JwtPayload,
+    ) => Promise<ListReservationsPage>;
+    getReservationDetail: (id: number, caller: JwtPayload) => Promise<ReservationWithParticipants>;
+    getMyReservations: (caller: JwtPayload) => Promise<ReservationWithParticipants[]>;
+    getUserReservations: (
+        userId: string,
+        caller: JwtPayload,
+    ) => Promise<ReservationWithParticipants[]>;
+
+    createReservationBatch: (
+        data: CreateReservationBatch,
+        caller: JwtPayload,
+    ) => Promise<ReservationWithParticipants[]>;
+    cancelReservation: (id: number, caller: JwtPayload) => Promise<Reservation>;
+    participantCheckin: (
+        reservationId: number,
+        caller: JwtPayload,
+    ) => Promise<{ reservation: Reservation; participant: Participant }>;
+    participantCheckout: (
+        reservationId: number,
+        caller: JwtPayload,
+    ) => Promise<{ reservation: Reservation; participant: Participant }>;
+
+    // Admin patch directo (ADMIN / ACCESS_ATTENDANT)
+    patchReservationAttendance: (
+        id: number,
+        next: ReservationAttendanceStatus,
+        caller: JwtPayload,
+    ) => Promise<Reservation>;
+
+    patchParticipantAttendance: (
+        reservationId: number,
+        participantId: number,
+        next: ParticipantAttendanceStatus,
+        caller: JwtPayload,
+    ) => Promise<Participant>;
+
+    // User view
+    getUserReservationsView: (
+        targetUserId: string,
+        caller: JwtPayload,
+    ) => Promise<{
+        user_id: string;
+        reservations: ReservationWithParticipants[];
+    }>;
+};
+
+export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlotsService {
+    const { repo, friendshipService, queue, emitter } = deps;
+
+    async function getFriendSet(callerEId: string): Promise<Set<string>> {
+        const ids = await friendshipService.getFriendIds(callerEId);
+        return new Set([callerEId, ...ids]);
+    }
+
+    async function applyFriendMask(
+        res: ReservationWithParticipants,
+        friendSet: Set<string>,
+    ): Promise<ReservationWithParticipants> {
+        return {
+            ...res,
+            participants: maskParticipants(
+                res.participants as Participant[],
+                res.id.toString(),
+                friendSet,
+            ),
+        };
+    }
+
+    // Reservables
+
+    const getAllReservables = async (): Promise<Reservable[]> => {
+        return repo.getAllReservables();
     };
 
-    const deriveStatus = (row: { is_blocked: any; is_available: any; current_reservations?: number; capacity: number }) => {
-        if (Boolean(row.is_blocked)) {
-            return { status: "occupied" as const, statusLabel: "Ocupado" };
-        }
-        if (!Boolean(row.is_available)) {
-            return { status: "occupied" as const, statusLabel: "Ocupado" };
-        }
-        if ((row.current_reservations ?? 0) > 0 && (row.current_reservations ?? 0) < row.capacity) {
-            return { status: "soon" as const, statusLabel: "Por comenzar" };
-        }
-        return { status: "available" as const, statusLabel: "Disponible" };
-    };
-
-    const getAvailableSlots = async (query: AvailableOfficeSlotsQuery): Promise<SlotAvailabilityResult[]> => {
-        const { start_time, end_time, user_id, floor_id } = query;
-
-        const rows = await repo.findAvailable(start_time, end_time, { floor_id });
-        let friendShipMap: Record<number, FriendOccupancy[]> = {};
-
-        if (user_id) {
-            const slotIds = rows.map((r) => r.id as number);
-            const occupancy = await repo.findFriendOccupancy(slotIds, user_id, start_time, end_time);
-            for (const occ of occupancy) {
-                const sid = (occ as any).slot_id as number;
-                if (!friendShipMap[sid]) {
-                    friendShipMap[sid] = [];
-                }
-                friendShipMap[sid].push(occ);
-            }
-        }
-
-        return rows.map((r) => ({
-            ...(deriveStatus(r)),
-            id: r.id,
-            name: r.name,
-            code: r.name,
-            capacity: r.capacity,
-            floor_id: r.floor_id,
-            floor_name: r.floor_name,
-            is_blocked: Boolean(r.is_blocked),
-            is_available: Boolean(r.is_available),
-            timeline: [
-                {
-                    id: `search-${r.id}`,
-                    start: toHourMinute(start_time),
-                    end: toHourMinute(end_time),
-                    status: Boolean(r.is_available) ? "free" : "occupied",
-                },
-            ],
-            occupied_by_friends: friendShipMap[r.id] ?? [],
-        }));
-    };
-
-    const getAllSlots = async (filters: { floor_id?: number }): Promise<SlotAvailabilityResult[]> => {
-        const rows = await repo.findAll(filters);
-
-        return rows.map((r) => ({
-            ...(deriveStatus(r)),
-            id: r.id,
-            name: r.name,
-            code: r.name,
-            capacity: r.capacity,
-            floor_id: r.floor_id,
-            floor_name: r.floor_name,
-            is_blocked: Boolean(r.is_blocked),
-            is_available: Boolean(r.is_available),
-            timeline: [
-                {
-                    id: `all-${r.id}`,
-                    start: "",
-                    end: "",
-                    status: Boolean(r.is_available) ? "free" : "occupied",
-                },
-            ],
-            occupied_by_friends: [],
-        }));
-    };
-    const getSlotById = async (id: number): Promise<OfficeSlot> => {
-        const slot = await repo.findById(id);
-        if (!slot) throw new NotFoundError(`Slot ${id} no encontrado`);
+    const getReservableById = async (id: number): Promise<Reservable> => {
+        const slot = await repo.getReservableById(id);
+        if (!slot) throw new NotFoundError(`El slot ${id} no existe`);
         return slot;
     };
 
-    const createSlot = async (data: CreateOfficeSlotBody): Promise<OfficeSlot> => {
-        const floorOk = await repo.floorExists(data.floor_id);
-        if (!floorOk) throw new UnprocessableError(`El piso ${data.floor_id} no existe`);
-        const id = await repo.create(data);
-        return (await repo.findById(id))!;
+    const createReservable = async (data: CreateReservable): Promise<Reservable> => {
+        const slot = await repo.createReservable(data);
+        if (!slot) throw new ConflictError('No fue posible crear el slot');
+        emitter.emit('slot.created', slot);
+        return slot;
     };
 
-    const updateSlot = async (id: number, data: UpdateOfficeSlotBody): Promise<OfficeSlot> => {
-        await getSlotById(id);
-        if (data.floor_id !== undefined) {
-            const floorOk = await repo.floorExists(data.floor_id);
-            if (!floorOk) throw new UnprocessableError(`El piso ${data.floor_id} no existe`);
-        }
-        await repo.update(id, data);
-        return (await repo.findById(id))!;
+    const updateReservable = async (id: number, data: UpdateReservable): Promise<Reservable> => {
+        const slot = await repo.updateReservable(id, data);
+        if (!slot) throw new NotFoundError(`El slot ${id} no existe`);
+        emitter.emit('slot.updated', slot);
+        return slot;
     };
 
-    const deleteSlot = async (id: number): Promise<{ message: string }> => {
-        await getSlotById(id);
-        await repo.remove(id);
-        return { message: `Slot ${id} eliminado` };
+    const deleteReservable = async (id: number): Promise<void> => {
+        const deleted = await repo.deleteReservable(id);
+        if (!deleted) throw new NotFoundError(`El slot ${id} no existe`);
+        emitter.emit('slot.deleted', id);
     };
 
-    const setBlockStatus = async (id: number, body: BlockSlotBody): Promise<OfficeSlot> => {
-        await getSlotById(id);
-        await repo.setBlocked(id, body.is_blocked);
-        return (await repo.findById(id))!;
+    // Reservations
+
+    const listReservations = async (
+        query: ListReservationsQuery,
+        caller: JwtPayload,
+    ): Promise<ListReservationsPage> => {
+        const friendIds = await friendshipService.getFriendIds(caller.eId);
+        return repo.listReservations(query, caller.eId, friendIds);
     };
 
-    // FEATURE 2: WORK GROUPS (Grupos de trabajo)
+    const getReservationDetail = async (
+        id: number,
+        caller: JwtPayload,
+    ): Promise<ReservationWithParticipants> => {
+        const res = await repo.getReservationWithParticipants(id);
+        if (!res) throw new NotFoundError(`La reservación ${id} no existe`);
 
-    const getWorkGroups = async (): Promise<WorkGroup[]> => {
-        return repo.findWorkGroups();
-    };
-
-    // FEATURE 3: RESERVATIONS (Reservaciones)
-
-    const getReservationDetail = async (id: number): Promise<ReservationDetail> => {
-        const reservation = await repo.findReservationById(id);
-        if (!reservation) throw new NotFoundError(`Reservation ${id} no encontrada`);
-
-        const reservationWorkGroups = await repo.findReservationWorkGroups([id]);
-        const reservationParticipants = await repo.findParticipantsByReservationIds([id]);
-
+        const friendSet = await getFriendSet(caller.eId);
         return {
-            id: reservation.id,
-            reservableId: reservation.reservable_id,
-            startTime: reservation.start_time,
-            endTime: reservation.end_time,
-            description: reservation.description,
-            canOverlap: Boolean(reservation.can_overlap),
-            workGroups: reservationWorkGroups.map((wg) => ({
-                id: wg.id,
-                name: wg.name,
-                description: wg.description,
-            })),
-            participants: reservationParticipants.map((participant) => ({
-                id: participant.id,
-                reservationId: participant.reservationId,
-                userId: participant.userId,
-                guestId: participant.guestId,
-                ownershipPriority: participant.ownershipPriority,
-                checkedIn: Boolean(participant.checkedIn),
-                status: participant.status as ParticipantStatus,
-                user: participant.userId ? {
-                    id: participant.userId,
-                    name: participant.user_name ?? "",
-                    email: participant.user_email ?? "",
-                    role: participant.user_role ?? "",
-                } : null,
-                guest: participant.guestId ? {
-                    id: participant.guestId,
-                    name: participant.guest_name ?? "",
-                    email: participant.guest_email ?? "",
-                } : null,
-            })),
+            ...res,
+            participants: maskParticipants(
+                res.participants as Participant[],
+                caller.eId,
+                friendSet,
+            ),
         };
     };
 
-    const createReservationBatch = async (data: CreateReservationBatchBody, currentUserId?: string): Promise<ReservationDetail[]> => {
-        const { reservableId, description, schedules, workGroupIds = [], userIds = [], guestIds = [], canOverlap } = data;
-
-        const slot = await getSlotById(reservableId);
-        if (!slot) throw new NotFoundError(`Reservable ${reservableId} no encontrado`);
-
-        const scheduleErrors = schedules.map((schedule) => {
-            if (schedule.end_time <= schedule.start_time) return `End must be after start for ${schedule.start_time}`;
-            if (new Date(schedule.start_time).toDateString() !== new Date(schedule.end_time).toDateString()) return `Start and end must be same day for ${schedule.start_time}`;
-            return null;
-        }).filter(Boolean);
-        if (scheduleErrors.length > 0) {
-            throw new UnprocessableError(scheduleErrors.join("; "));
-        }
-
-        const groupMembers = workGroupIds.length > 0 ? await repo.findWorkGroupMembers(workGroupIds) : [];
-        const allUserIds = [...userIds, ...groupMembers.map((member) => member.user_id)];
-        const uniqueUserIds = Array.from(new Set(allUserIds));
-        const uniqueGuestIds = Array.from(new Set(guestIds ?? []));
-
-        const participants: Array<{ userId: string | null; guestId: number | null; ownershipPriority: number; status: ParticipantStatus }> = [];
-        let priority = 0;
-
-        if (currentUserId) {
-            participants.push({ userId: currentUserId, guestId: null, ownershipPriority: priority++, status: "ACCEPTED" });
-        }
-
-        // ✅ CAMBIO: Marcar al registrador (currentUserId) como ACCEPTED, otros como PENDING
-        for (const userId of uniqueUserIds) {
-            if (userId === currentUserId) continue;
-            participants.push({ userId, guestId: null, ownershipPriority: priority++, status: "PENDING" });
-        }
-
-        for (const guestId of uniqueGuestIds) {
-            participants.push({ userId: null, guestId, ownershipPriority: priority++, status: "PENDING" });
-        }
-
-        if (participants.length === 0) {
-            throw new UnprocessableError("Debe haber al menos un invitado o usuario en la reservación");
-        }
-
-        // ── Overlap validation & inserts (one per schedule) ──────────────────────
-        // When canOverlap=false, we validate against:
-        //   1. Other reservations with can_overlap=0 in the same window
-        //   2. Any event in the same window (events always block)
-        //
-        // All reads happen before any writes so that we fail fast without partial
-        // inserts. The writes themselves are not wrapped in an explicit BEGIN/COMMIT
-        // because db.execute likely auto-commits; if your Db abstraction exposes
-        // transactions, wrapping the write loop is recommended.
-
-        if (!canOverlap) {
-            for (const schedule of schedules) {
-                const [conflictingReservations, conflictingEvents] = await Promise.all([
-                    repo.findOverlappingReservations(reservableId, schedule.start_time, schedule.end_time),
-                    repo.findOverlappingEvents(reservableId, schedule.start_time, schedule.end_time),
-                ]);
-
-                if (conflictingReservations.length > 0) {
-                    throw new ConflictError(
-                        `El espacio ya tiene reservaciones que se empalman en el horario ${schedule.start_time} – ${schedule.end_time}`
-                    );
-                }
-                if (conflictingEvents.length > 0) {
-                    throw new ConflictError(
-                        `El espacio tiene un evento que se empalma en el horario ${schedule.start_time} – ${schedule.end_time}`
-                    );
-                }
-            }
-        }
-
-        const reservationIds: number[] = [];
-        for (const schedule of schedules) {
-            const reservationId = await repo.createReservation(reservableId, schedule.start_time, schedule.end_time, canOverlap, description);
-            reservationIds.push(reservationId);
-            if (workGroupIds.length > 0) {
-                await repo.addReservationWorkGroups(reservationId, workGroupIds);
-            }
-            for (const participant of participants) {
-                await repo.addReservationParticipant(reservationId, participant.userId, participant.guestId, participant.ownershipPriority, participant.status);
-            }
-        }
-
-        const details = await Promise.all(reservationIds.map((id) => getReservationDetail(id)));
-        return details;
+    const getMyReservations = async (
+        caller: JwtPayload,
+    ): Promise<ReservationWithParticipants[]> => {
+        return repo.getReservationsByUser(caller.eId);
     };
 
-    const updateParticipantStatus = async (participantId: number, status: ParticipantStatus, reinvite = false): Promise<ReservationParticipant> => {
-        const participant = await repo.findParticipantById(participantId);
-        if (!participant) throw new NotFoundError(`Participant ${participantId} no encontrado`);
+    const getUserReservations = async (
+        userId: string,
+        caller: JwtPayload,
+    ): Promise<ReservationWithParticipants[]> => {
+        const reservations = await repo.getReservationsByUser(userId);
+        const friendSet = await getFriendSet(caller.eId);
+        return Promise.all(reservations.map((r) => applyFriendMask(r, friendSet)));
+    };
 
-        if (participant.status === "REJECTED" && status === "PENDING" && !reinvite) {
-            throw new UnprocessableError("Solo se puede reenviar una invitación rechazada con reinvite=true");
+    const createReservationBatch = async (
+        data: CreateReservationBatch,
+        caller: JwtPayload,
+    ): Promise<ReservationWithParticipants[]> => {
+        const slot = await repo.getReservableById(data.reservable_id);
+        if (!slot) throw new NotFoundError(`El slot ${data.reservable_id} no existe`);
+        if (slot.is_blocked) {
+            throw new ForbiddenError('Este slot está bloqueado');
         }
 
-        const allowedTransitions: Record<string, string[]> = {
-            PENDING: ["ACCEPTED", "REJECTED"],
-            ACCEPTED: ["REJECTED"],
-            REJECTED: ["PENDING"],
-        };
+        const created = await repo.createReservationBatch(
+            caller.eId,
+            data.reservable_id,
+            data.category,
+            data.description,
+            data.timestamps,
+            data.participants,
+        );
 
-        if (!allowedTransitions[participant.status].includes(status)) {
-            throw new UnprocessableError(`Transición de estado inválida de ${participant.status} a ${status}`);
-        }
+        if (!created.length) throw new ConflictError('No fue posible crear ninguna reservación');
 
-        await repo.updateParticipantStatus(participantId, status);
-        const updated = await repo.findParticipantById(participantId);
-        if (!updated) throw new NotFoundError(`Participant ${participantId} no encontrado después de actualización`);
-
-        return {
-            id: updated.id,
-            reservationId: updated.reservationId,
-            userId: updated.userId,
-            guestId: updated.guestId,
-            ownershipPriority: updated.ownershipPriority,
-            checkedIn: Boolean(updated.checkedIn),
-            status: updated.status as ParticipantStatus,
-            user: updated.userId ? {
-                id: updated.userId,
-                name: updated.user_name ?? "",
-                email: updated.user_email ?? "",
-                role: updated.user_role ?? "",
-            } : null,
-            guest: updated.guestId ? {
-                id: updated.guestId,
-                name: updated.guest_name ?? "",
-                email: updated.guest_email ?? "",
-            } : null,
-        };
-    };
-
-    const getMyReservations = async (userId: string): Promise<UserReservationSummary> => {
-        return repo.findMyReservationSummaries(userId);
-    };
-
-    const getMyFriendsReservations = async (userId: string): Promise<FriendReservationsSummary> => {
-        if (!friendshipService) return [];
-        const friendIds = await friendshipService.getFriendIds(userId);
-        if (friendIds.length === 0) return [];
-        return repo.findFriendsReservationSummaries(friendIds);
-    };
-
-    // FEATURE 4: EVENTS (Eventos)
-
-    const getEvents = async (query: GetEventsQuery): Promise<Event[]> => {
-        return repo.findEvents(query);
-    };
-
-    const getEventById = async (id: number): Promise<Event> => {
-        const event = await repo.findEventById(id);
-        if (!event) throw new NotFoundError(`Event ${id} no encontrado`);
-        return event;
-    };
-
-    const createEvent = async (data: CreateEventBody): Promise<Event> => {
-        // Validate reservable exists when provided
-        if (data.reservable_id !== undefined) {
-            const slot = await repo.findById(data.reservable_id);
-            if (!slot) throw new NotFoundError(`Reservable ${data.reservable_id} no encontrado`);
-
-            // Events always block the space — validate against existing reservations
-            // (only those with can_overlap=0) and other events
-            const [conflictingReservations, conflictingEvents] = await Promise.all([
-                repo.findOverlappingReservations(data.reservable_id, data.start_time, data.end_time),
-                repo.findOverlappingEvents(data.reservable_id, data.start_time, data.end_time),
-            ]);
-
-            if (conflictingReservations.length > 0) {
-                throw new UnprocessableError(
-                    `El espacio ya tiene reservaciones que se empalman con el evento en el horario ${data.start_time} – ${data.end_time}`
+        for (const res of created) {
+            try {
+                await queue.add(
+                    'no-show',
+                    { reservationId: res.id },
+                    { delay: noShowDelay(res.start_time), jobId: noShowJobId(res.id) },
+                );
+                await queue.add(
+                    'auto-checkout',
+                    { reservationId: res.id },
+                    { delay: checkoutDelay(res.end_time), jobId: checkoutJobId(res.id) },
+                );
+            } catch (err) {
+                console.error(
+                    `[office-queue] Error encolando jobs para reservación ${res.id}:`,
+                    (err as Error).message,
                 );
             }
-            if (conflictingEvents.length > 0) {
-                throw new UnprocessableError(
-                    `Ya existe un evento que se empalma en el horario ${data.start_time} – ${data.end_time}`
-                );
+
+            emitter.emit('reservation.created', {
+                reservation: res,
+                participants: res.participants as Participant[],
+                reservable: slot,
+            });
+        }
+
+        return created;
+    };
+
+    const cancelReservation = async (id: number, caller: JwtPayload): Promise<Reservation> => {
+        const isAdmin = caller.role === Roles.ADMIN;
+        const res = await repo.getReservationWithParticipants(id);
+        if (!res) throw new NotFoundError(`La reservación ${id} no existe`);
+
+        if (!isAdmin) {
+            // El "owner activo" es el participante con menor ownership_priority
+            const activeOwner = (res.participants as Participant[])
+                .filter(p => !PARTICIPANT_TERMINAL_STATUSES.includes(p.attendance_status))
+                .sort((a, b) => a.ownership_priority - b.ownership_priority)[0];
+
+            if (!activeOwner || activeOwner.user_id !== caller.eId) {
+                throw new ForbiddenError("Solo el dueño activo de la reservación puede cancelarla");
             }
         }
 
-        const id = await repo.createEvent(data);
-        return (await repo.findEventById(id))!;
+        if (res.attendance_status === "CANCELED") {
+            throw new ConflictError("La reservación ya está cancelada");
+        }
+
+        if (NON_CANCELABLE_STATUSES.includes(res.attendance_status)) {
+            throw new ConflictError(
+                `No se puede cancelar una reservación con estado '${res.attendance_status}'`
+            );
+        }
+
+        const updated = await repo.cancelReservation(id);
+        if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+
+        await queue.remove(noShowJobId(id)).catch(() => { });
+        await queue.remove(checkoutJobId(id)).catch(() => { });
+
+        emitter.emit("reservation.canceled", {
+            reservation: updated,
+            participants: res.participants as Participant[],
+            reservable: res.reservable,
+        });
+
+        return updated;
     };
 
-    // METADATA ENDPOINTS (Metadata para clientes)
+    const participantCheckin = async (
+        reservationId: number,
+        caller: JwtPayload,
+    ): Promise<{ reservation: Reservation; participant: Participant }> => {
+        const res = await repo.getReservationById(reservationId);
+        if (!res) throw new NotFoundError(`La reservación ${reservationId} no existe`);
 
-    const getUsers = async (): Promise<UserSummary[]> => {
-        return repo.findUsers();
+        if (res.attendance_status === 'CANCELED') {
+            throw new ConflictError('La reservación está cancelada');
+        }
+        if (res.attendance_status === 'CHECKED_OUT' || res.attendance_status === 'NO_SHOW') {
+            throw new ConflictError('La reservación ya finalizó');
+        }
+
+        const participant = await repo.getParticipantByReservationAndUser(
+            reservationId,
+            caller.eId,
+        );
+        if (!participant) {
+            throw new NotFoundError('No eres participante de esta reservación');
+        }
+
+        assertValidParticipantTransition(participant.attendance_status, 'CHECKED_IN');
+
+        const updatedParticipant = await repo.updateParticipantAttendance(
+            participant.id,
+            'CHECKED_IN',
+        );
+        if (!updatedParticipant)
+            throw new ConflictError('No fue posible actualizar el participante');
+
+        let updatedReservation = res;
+        if (res.attendance_status === 'NOT_ARRIVED') {
+            const updated = await repo.updateReservationAttendance(reservationId, 'CHECKED_IN');
+            if (updated) {
+                updatedReservation = updated;
+                await queue.remove(noShowJobId(reservationId)).catch(() => { });
+            }
+        }
+
+        const allParticipants = await repo.getParticipantsByReservation(reservationId);
+        const slot = (await repo.getReservableById(res.reservable_id))!;
+
+        emitter.emit('reservation.checkedin', {
+            reservation: updatedReservation,
+            participants: allParticipants,
+            reservable: slot,
+        });
+
+        return { reservation: updatedReservation, participant: updatedParticipant };
     };
 
-    const getGuests = async (): Promise<GuestSummary[]> => {
-        return repo.findGuests();
+    const participantCheckout = async (
+        reservationId: number,
+        caller: JwtPayload,
+    ): Promise<{ reservation: Reservation; participant: Participant }> => {
+        const res = await repo.getReservationById(reservationId);
+        if (!res) throw new NotFoundError(`La reservación ${reservationId} no existe`);
+
+        const participant = await repo.getParticipantByReservationAndUser(
+            reservationId,
+            caller.eId,
+        );
+        if (!participant) {
+            throw new NotFoundError('No eres participante de esta reservación');
+        }
+
+        assertValidParticipantTransition(participant.attendance_status, 'CHECKED_OUT');
+
+        const updatedParticipant = await repo.updateParticipantAttendance(
+            participant.id,
+            'CHECKED_OUT',
+        );
+        if (!updatedParticipant)
+            throw new ConflictError('No fue posible actualizar el participante');
+
+        return { reservation: res, participant: updatedParticipant };
+    };
+
+    //  Admin patch directo
+    const patchReservationAttendance = async (
+        id: number,
+        next: ReservationAttendanceStatus,
+        caller: JwtPayload,
+    ): Promise<Reservation> => {
+        const isAdminOrAttendant =
+            caller.role === Roles.ADMIN || caller.role === Roles.ACCESS_ATTENDANT;
+
+        const res = isAdminOrAttendant ? await repo.getReservationById(id) : null;
+
+        if (!res) {
+            if (!isAdminOrAttendant)
+                throw new ForbiddenError('No tienes permiso para esta operación');
+            throw new NotFoundError(`La reservación ${id} no existe`);
+        }
+
+        assertValidReservationTransition(res.attendance_status, next);
+
+        const updated = await repo.updateReservationAttendance(id, next);
+        if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
+
+        if (next === 'CHECKED_IN') {
+            await queue.remove(noShowJobId(id)).catch(() => { });
+        }
+        if (next === 'CHECKED_OUT' || next === 'NO_SHOW') {
+            await queue.remove(noShowJobId(id)).catch(() => { });
+            await queue.remove(checkoutJobId(id)).catch(() => { });
+        }
+
+        const allParticipants = await repo.getParticipantsByReservation(id);
+        const slot = (await repo.getReservableById(res.reservable_id))!;
+
+        emitter.emit('reservation.attendance_updated', {
+            reservation: updated,
+            participants: allParticipants,
+            reservable: slot,
+        });
+
+        return updated;
+    };
+
+    const patchParticipantAttendance = async (
+        reservationId: number,
+        participantId: number,
+        next: ParticipantAttendanceStatus,
+        caller: JwtPayload,
+    ): Promise<Participant> => {
+        const res = await repo.getReservationById(reservationId);
+        if (!res) throw new NotFoundError(`La reservación ${reservationId} no existe`);
+
+        if (res.attendance_status === 'CANCELED') {
+            throw new ConflictError('La reservación está cancelada');
+        }
+
+        const participant = await repo.getParticipantById(participantId);
+        if (!participant || participant.reservations_id !== reservationId) {
+            throw new NotFoundError('Participante no encontrado en esta reservación');
+        }
+
+        // Solo el participante o admin puede cambiar su estado
+        const isAdmin = caller.role === Roles.ADMIN;
+        if (!isAdmin && participant.user_id !== caller.eId) {
+            throw new ForbiddenError('Solo puedes modificar tu propio estado de participación');
+        }
+
+        assertValidParticipantTransition(participant.attendance_status, next);
+
+        const updated = await repo.updateParticipantAttendance(participantId, next);
+        if (!updated) throw new NotFoundError('No fue posible actualizar el participante');
+
+        const allParticipants = await repo.getParticipantsByReservation(reservationId);
+        const slot = (await repo.getReservableById(res.reservable_id))!;
+
+        emitter.emit('participant.updated', {
+            reservation: res,
+            participants: allParticipants,
+            reservable: slot,
+        });
+
+        return updated;
+    };
+
+    // Vista por usuario
+
+    const getUserReservationsView = async (
+        targetUserId: string,
+        caller: JwtPayload,
+    ): Promise<{ user_id: string; reservations: ReservationWithParticipants[] }> => {
+        const reservations = await repo.getReservationsByUser(targetUserId);
+        const friendSet = await getFriendSet(caller.eId);
+
+        const masked = await Promise.all(reservations.map((r) => applyFriendMask(r, friendSet)));
+
+        return { user_id: targetUserId, reservations: masked };
     };
 
     return {
-        getAvailableSlots,
-        getAllSlots,
-        getSlotById,
-        createSlot,
-        updateSlot,
-        deleteSlot,
-        setBlockStatus,
-        getWorkGroups,
-        getUsers,
-        getGuests,
+        getAllReservables,
+        getReservableById,
+        createReservable,
+        updateReservable,
+        deleteReservable,
+
+        listReservations,
         getReservationDetail,
-        createReservationBatch,
-        updateParticipantStatus,
         getMyReservations,
-        getMyFriendsReservations,
-        getEvents,
-        getEventById,
-        createEvent,
+        getUserReservations,
+
+        createReservationBatch,
+        cancelReservation,
+
+        participantCheckin,
+        participantCheckout,
+
+        patchReservationAttendance,
+        patchParticipantAttendance,
+
+        getUserReservationsView,
     };
 }
