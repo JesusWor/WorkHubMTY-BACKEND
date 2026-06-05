@@ -3,22 +3,28 @@ import {
     OFFICE_QUEUE_NAME,
     OfficeNoShowJobData,
     OfficeCheckoutJobData,
+    OfficeUnblockJobData,
+    OfficeJobData,
     officeBullmqConnection,
 } from "./office-queue.js";
 import { officeEvents } from "../events/office-events.emitter.js";
 import type { Reservation, Participant } from "../../modules/office-slots/office-slots.schema.js";
 import type { Reservable } from "../../modules/office-slots/office-slots.schema.js";
 
-type JobData = OfficeNoShowJobData | OfficeCheckoutJobData;
+type JobData = OfficeNoShowJobData | OfficeCheckoutJobData | OfficeUnblockJobData;
 
 export type OfficeWorkerDeps = {
     markNoShowForReservation: (reservationId: number) => Promise<
-        | { marked: true;  reservation: Reservation; participants: Participant[] }
+        | { marked: true; reservation: Reservation; participants: Participant[] }
         | { marked: false; reason: string }
     >;
     markCheckoutForReservation: (reservationId: number) => Promise<
         | { action: "checked_out" | "no_show_fallback"; reservation: Reservation; participants: Participant[] }
         | { action: "skipped"; reason: string }
+    >;
+    unblockReservable: (reservableId: number) => Promise<
+        | { marked: true; reservable: Reservable }
+        | { marked: false; reason: string }
     >;
     getReservableById: (id: number) => Promise<Reservable | null>;
 };
@@ -32,6 +38,8 @@ export function createOfficeWorker(deps: OfficeWorkerDeps): Worker {
                     return handleNoShow(job as Job<OfficeNoShowJobData>, deps);
                 case "auto-checkout":
                     return handleAutoCheckout(job as Job<OfficeCheckoutJobData>, deps);
+                case "unblock-reservable":
+                    return handleUnblockReservable(job as Job<OfficeUnblockJobData>, deps);
                 default:
                     console.warn(`[office-worker] Job desconocido ignorado: ${job.name}`);
             }
@@ -76,7 +84,7 @@ async function handleNoShow(
     }
 
     officeEvents.emit("reservation.noshow", {
-        reservation:  result.reservation,
+        reservation: result.reservation,
         participants: result.participants,
         reservable,
     });
@@ -106,7 +114,7 @@ async function handleAutoCheckout(
         case "checked_out":
             console.log(`[office-worker] Reservación ${reservationId} marcada como CHECKED_OUT (auto)`);
             officeEvents.emit("reservation.checkedout", {
-                reservation:  result.reservation,
+                reservation: result.reservation,
                 participants: result.participants,
                 reservable,
             });
@@ -118,10 +126,29 @@ async function handleAutoCheckout(
                 `El job de no-show pudo haber fallado o el servidor reinició.`
             );
             officeEvents.emit("reservation.noshow", {
-                reservation:  result.reservation,
+                reservation: result.reservation,
                 participants: result.participants,
                 reservable,
             });
             break;
     }
+}
+
+async function handleUnblockReservable(
+    job: Job<OfficeUnblockJobData>,
+    deps: OfficeWorkerDeps
+): Promise<void> {
+    const { reservableId } = job.data;
+    console.log(`[office-worker] Procesando desbloqueo para reservable ${reservableId}`);
+
+    const result = await deps.unblockReservable(reservableId);
+
+    if (!result.marked) {
+        console.warn(`[office-worker] No se pudo desbloquear el reservable ${reservableId}`);
+        return;
+    }
+
+    console.log(`[office-worker] Reservable ${reservableId} desbloqueado exitosamente`);
+
+    officeEvents.emit("slot.updated", result.reservable);
 }
