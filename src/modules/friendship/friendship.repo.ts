@@ -14,9 +14,9 @@ export type FriendshipRepo = {
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<SentFriendRequest[]>;
     createRequest: (fromUser: string, toUserIds: string[], message?: string | undefined) => Promise<FriendRequests | null>;
-    acceptRequest: (toUser: string, fromUser: string) => Promise<boolean>;
-    cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
-    rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
+    acceptRequest: (toUser: string, fromUser: string) => Promise<FriendRequest | null>;
+    cancelRequest: (fromUser: string, toUser: string) => Promise<FriendRequest | null>;
+    rejectRequest: (toUser: string, fromUser: string) => Promise<FriendRequest | null>;
 
 };
 
@@ -175,31 +175,32 @@ export function makeFriendshipRepo(db: Db): FriendshipRepo {
         return rows;
     };
 
-    const acceptRequest = async (toUser: string, fromUser: string): Promise<boolean> => {
+    const acceptRequest = async (toUser: string, fromUser: string): Promise<FriendRequest | null> => {
         const { rows } = await db.query(`
             UPDATE friend_requests
             SET status = 'ACCEPTED', resolved_at = NOW()
             WHERE from_user = ? AND to_user = ? AND status = 'PENDING'
         `, [fromUser, toUser]);
-        return (rows as any).affectedRows > 0;
+
+        return rows[0];
     };
 
-    const cancelRequest = async (fromUser: string, toUser: string): Promise<boolean> => {
+    const cancelRequest = async (fromUser: string, toUser: string): Promise<FriendRequest | null> => {
         const { rows } = await db.query(`
             UPDATE friend_requests
             SET status = 'CANCELLED', resolved_at = NOW()
             WHERE from_user = ? AND to_user = ? AND status = 'PENDING'
         `, [fromUser, toUser]);
-        return (rows as any).affectedRows > 0;
+        return rows[0];
     };
 
-    const rejectRequest = async (toUser: string, fromUser: string): Promise<boolean> => {
+    const rejectRequest = async (toUser: string, fromUser: string): Promise<FriendRequest | null> => {
         const { rows } = await db.query(`
             UPDATE friend_requests
             SET status = 'REJECTED', resolved_at = NOW()
             WHERE from_user = ? AND to_user = ? AND status = 'PENDING'
         `, [fromUser, toUser]);
-        return (rows as any).affectedRows > 0;
+        return rows[0];
     };
 
     return {
