@@ -11,12 +11,14 @@ import {
     ReservationIdParamSchema,
     ParticipantIdParamSchema,
     UserIdParamSchema,
+    AvailableReservablesQuerySchema,
 } from './office-slots.schema.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
 export type OfficeSlotsController = {
     // Reservables
     getAllReservables: (req: Request, res: Response) => Promise<void>;
+    getAvailableReservables: (req: Request, res: Response) => Promise<void>;
     getReservableById: (req: Request, res: Response) => Promise<void>;
     createReservable: (req: Request, res: Response) => Promise<void>;
     updateReservable: (req: Request, res: Response) => Promise<void>;
@@ -44,6 +46,17 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         const slots = await service.getAllReservables();
         GlobalResponse.okWithData(res, slots);
     };
+    
+    const getAvailableReservables = async (_req: Request, res: Response): Promise<void> => {
+        const parsed = AvailableReservablesQuerySchema.safeParse(_req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const slots = await service.getAvailableReservables(parsed.data);
+        GlobalResponse.okWithData(res, slots);
+    };
+
 
     const getReservableById = async (req: Request, res: Response): Promise<void> => {
         const parsed = ReservationIdParamSchema.safeParse(req.params);
@@ -220,6 +233,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
 
     return {
         getAllReservables,
+        getAvailableReservables,
         getReservableById,
         createReservable,
         updateReservable,

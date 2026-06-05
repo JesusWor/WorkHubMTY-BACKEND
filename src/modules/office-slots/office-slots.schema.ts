@@ -68,11 +68,15 @@ export const ReservableSchema = z.object({
     id: z.number().int(),
     name: z.string().min(1).max(32),
     capacity: z.number().int().min(1),
-    floor_id: z.number().int(),
+    floor: z.string(),
+    status:z.enum(['available', 'occupied', 'soon', 'blocked']),
     is_blocked: z.boolean(),
 });
 
-export const CreateReservableSchema = ReservableSchema.omit({ id: true });
+export const CreateReservableSchema = ReservableSchema.omit({ id: true, status: true }).extend({
+    floor_id: z.number().int(),
+});
+
 export const UpdateReservableSchema = CreateReservableSchema.partial();
 
 export type Reservable = z.infer<typeof ReservableSchema>;
@@ -203,6 +207,24 @@ export type ListReservationsPage = z.infer<typeof ListReservationsPageSchema>;
 export const ReservationIdParamSchema = z.object({
     id: z.coerce.number().int().positive(),
 });
+
+export const AvailableReservablesQuerySchema = z.object({
+    floorId: z.coerce.number().int().optional(),
+    startTime: z.coerce.date().optional(),
+    endTime: z.coerce.date().optional(),
+    minCapacity: z.coerce.number().int().min(1).optional(),
+    maxCapacity: z.coerce.number().int().min(1).optional(),
+    query: z.string().optional(),
+    daysToApply: z.array(z.coerce.date()).optional(),
+    userId: z.string().optional(),
+}).refine(
+    (d) => {
+        if (d.startTime && d.endTime) return d.endTime > d.startTime;
+        return true;
+    }, { message: 'endTime debe ser posterior a startTime', path: ['endTime'] },
+);
+
+export type AvailableReservablesQuery = z.infer<typeof AvailableReservablesQuerySchema>;
 
 export const ParticipantIdParamSchema = z.object({
     id: z.coerce.number().int().positive(),

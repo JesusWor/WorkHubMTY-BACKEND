@@ -16,6 +16,7 @@ import {
     RESERVATION_TRANSITIONS,
     NON_CANCELABLE_STATUSES,
     PARTICIPANT_USER_TRANSITIONS,
+    AvailableReservablesQuery,
 } from './office-slots.schema.js';
 import {
     BadRequestError,
@@ -73,11 +74,11 @@ function assertValidParticipantTransition(
 }
 
 const PARTICIPANT_TERMINAL_STATUSES: ParticipantAttendanceStatus[] = [
-    "CHECKED_OUT",
-    "NO_SHOW",
-    "NOT_ACCEPTED",
-    "REJECTED",
-    "CANCELED",
+    'CHECKED_OUT',
+    'NO_SHOW',
+    'NOT_ACCEPTED',
+    'REJECTED',
+    'CANCELED',
 ];
 
 // Friendship masking
@@ -113,6 +114,7 @@ export type OfficeSlotsServiceDeps = {
 export type OfficeSlotsService = {
     // Reservables
     getAllReservables: () => Promise<Reservable[]>;
+    getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
     getReservableById: (id: number) => Promise<Reservable>;
     createReservable: (data: CreateReservable) => Promise<Reservable>;
     updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
@@ -195,6 +197,11 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     const getAllReservables = async (): Promise<Reservable[]> => {
         return repo.getAllReservables();
     };
+    
+    const getAvailableReservables = async (query: AvailableReservablesQuery): Promise<Reservable[]> => {
+        return repo.getAvailableReservables(query);
+    };
+
 
     const getReservableById = async (id: number): Promise<Reservable> => {
         const slot = await repo.getReservableById(id);
@@ -323,31 +330,31 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!isAdmin) {
             // El "owner activo" es el participante con menor ownership_priority
             const activeOwner = (res.participants as Participant[])
-                .filter(p => !PARTICIPANT_TERMINAL_STATUSES.includes(p.attendance_status))
+                .filter((p) => !PARTICIPANT_TERMINAL_STATUSES.includes(p.attendance_status))
                 .sort((a, b) => a.ownership_priority - b.ownership_priority)[0];
 
             if (!activeOwner || activeOwner.user_id !== caller.eId) {
-                throw new ForbiddenError("Solo el dueño activo de la reservación puede cancelarla");
+                throw new ForbiddenError('Solo el dueño activo de la reservación puede cancelarla');
             }
         }
 
-        if (res.attendance_status === "CANCELED") {
-            throw new ConflictError("La reservación ya está cancelada");
+        if (res.attendance_status === 'CANCELED') {
+            throw new ConflictError('La reservación ya está cancelada');
         }
 
         if (NON_CANCELABLE_STATUSES.includes(res.attendance_status)) {
             throw new ConflictError(
-                `No se puede cancelar una reservación con estado '${res.attendance_status}'`
+                `No se puede cancelar una reservación con estado '${res.attendance_status}'`,
             );
         }
 
         const updated = await repo.cancelReservation(id);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        await queue.remove(noShowJobId(id)).catch(() => { });
-        await queue.remove(checkoutJobId(id)).catch(() => { });
+        await queue.remove(noShowJobId(id)).catch(() => {});
+        await queue.remove(checkoutJobId(id)).catch(() => {});
 
-        emitter.emit("reservation.canceled", {
+        emitter.emit('reservation.canceled', {
             reservation: updated,
             participants: res.participants as Participant[],
             reservable: res.reservable,
@@ -392,7 +399,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             const updated = await repo.updateReservationAttendance(reservationId, 'CHECKED_IN');
             if (updated) {
                 updatedReservation = updated;
-                await queue.remove(noShowJobId(reservationId)).catch(() => { });
+                await queue.remove(noShowJobId(reservationId)).catch(() => {});
             }
         }
 
@@ -458,11 +465,11 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
         if (next === 'CHECKED_IN') {
-            await queue.remove(noShowJobId(id)).catch(() => { });
+            await queue.remove(noShowJobId(id)).catch(() => {});
         }
         if (next === 'CHECKED_OUT' || next === 'NO_SHOW') {
-            await queue.remove(noShowJobId(id)).catch(() => { });
-            await queue.remove(checkoutJobId(id)).catch(() => { });
+            await queue.remove(noShowJobId(id)).catch(() => {});
+            await queue.remove(checkoutJobId(id)).catch(() => {});
         }
 
         const allParticipants = await repo.getParticipantsByReservation(id);
@@ -534,6 +541,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
 
     return {
         getAllReservables,
+        getAvailableReservables,
         getReservableById,
         createReservable,
         updateReservable,
