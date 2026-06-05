@@ -213,7 +213,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     const createReservable = async (data: CreateReservable): Promise<Reservable> => {
         const slot = await repo.createReservable(data);
         if (!slot) throw new ConflictError('No fue posible crear el slot');
-        emitter.emit('slot.created', slot);
+        emitter.emit('office.slot.created', slot);
         return slot;
     };
 
@@ -245,14 +245,14 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             }
         }
 
-        emitter.emit('slot.updated', slot);
+        emitter.emit('office.slot.updated', slot);
         return slot;
     };
 
     const deleteReservable = async (id: number): Promise<void> => {
         const deleted = await repo.deleteReservable(id);
         if (!deleted) throw new NotFoundError(`El slot ${id} no existe`);
-        emitter.emit('slot.deleted', id);
+        emitter.emit('office.slot.deleted', id);
     };
 
     // Reservations
@@ -338,7 +338,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
                 );
             }
 
-            emitter.emit('reservation.created', {
+            emitter.emit('office.reservation.created', {
                 reservation: res,
                 participants: res.participants as Participant[],
                 reservable: slot,
@@ -380,7 +380,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         await queue.remove(noShowJobId(id)).catch(() => { });
         await queue.remove(checkoutJobId(id)).catch(() => { });
 
-        emitter.emit("reservation.canceled", {
+        emitter.emit("office.reservation.canceled", {
             reservation: updated,
             participants: res.participants as Participant[],
             reservable: res.reservable,
@@ -432,7 +432,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const allParticipants = await repo.getParticipantsByReservation(reservationId);
         const slot = (await repo.getReservableById(res.reservable_id))!;
 
-        emitter.emit('reservation.checkedin', {
+        emitter.emit('office.reservation.checkedin', {
             reservation: updatedReservation,
             participants: allParticipants,
             reservable: slot,
@@ -501,7 +501,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const allParticipants = await repo.getParticipantsByReservation(id);
         const slot = (await repo.getReservableById(res.reservable_id))!;
 
-        emitter.emit('reservation.attendance_updated', {
+        emitter.emit('office.reservation.attendance_updated', {
             reservation: updated,
             participants: allParticipants,
             reservable: slot,
@@ -542,7 +542,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const allParticipants = await repo.getParticipantsByReservation(reservationId);
         const slot = (await repo.getReservableById(res.reservable_id))!;
 
-        emitter.emit('participant.updated', {
+        emitter.emit('office.participant.updated', {
             reservation: res,
             participants: allParticipants,
             reservable: slot,

@@ -1,22 +1,37 @@
 import type { AchievementsService } from "../../modules/achievements/achievements.service.js";
 import type { TypedEventEmitter } from "../../infra/events/typed-event-emitter.js";
+import { type OfficeEventMap, officeEvents } from "../../infra/events/office-events.emitter.js";
 import { type ParkingEventMap, parkingEvents } from "../../infra/events/parking-events.emitter.js";
 import { type UserEventMap, userEvents } from "../../infra/events/user-events.emitter.js";
 import { type TeamEventMap, teamEvents } from "../../infra/events/team-events.emitter.js";
 
+import { CHECKIN_TOLERANCE_MINUTES } from "../parking-slots/parking-slots.service.js";
+const MINUTES_TO_MS = 60 * 1000;
 
-export type GlobalEventMap = ParkingEventMap & UserEventMap & TeamEventMap;
+export type GlobalEventMap = OfficeEventMap & ParkingEventMap & UserEventMap & TeamEventMap;
 
 export const emitterForEvent: {
     [K in keyof GlobalEventMap]: TypedEventEmitter<Pick<GlobalEventMap, K>>;
 } = {
-    "reservation.created": parkingEvents,
-    "reservation.canceled": parkingEvents,
-    "reservation.attendance_updated": parkingEvents,
-    "reservation.no_show": parkingEvents,
-    "lot.created": parkingEvents,
-    "lot.updated": parkingEvents,
-    "lot.deleted": parkingEvents,
+    "office.reservation.created": officeEvents,
+    "office.reservation.canceled": officeEvents,
+    "office.reservation.checkedin": officeEvents,
+    "office.reservation.attendance_updated": officeEvents,
+    "office.reservation.noshow": officeEvents,
+    "office.reservation.checkedout": officeEvents,
+    "office.participant.updated": officeEvents,
+    "office.slot.created": officeEvents,
+    "office.slot.updated": officeEvents,
+    "office.slot.deleted": officeEvents,
+
+    "parking.reservation.created": parkingEvents,
+    "parking.reservation.canceled": parkingEvents,
+    "parking.reservation.attendance_updated": parkingEvents,
+    "parking.reservation.noshow": parkingEvents,
+    "parking.lot.created": parkingEvents,
+    "parking.lot.updated": parkingEvents,
+    "parking.lot.deleted": parkingEvents,
+
     "user.created": userEvents,
     "user.updated": userEvents,
     "user.deleted": userEvents,
@@ -64,22 +79,6 @@ function defineRules<const T extends readonly AchievementRule<any>[]>(rules: T):
 
 export const achievementRules = defineRules([
     defineRule({
-        event: "reservation.created",
-        achievementId: 3,
-        description: "CEO de reservaciones",
-        handler: async (ctx, reservation) => {
-            await ctx.addProgress(reservation.user_id, ctx.achievementId, 1);
-        },
-    }),
-    defineRule({
-        event: "reservation.no_show",
-        achievementId: 4,
-        description: "No me olvides",
-        handler: async (ctx, reservation) => {
-            await ctx.addProgress(reservation.user_id, ctx.achievementId, 1);
-        },
-    }),
-    defineRule({
         event: "friendship.created",
         achievementId: 1,
         description: "Red personal",
@@ -88,6 +87,139 @@ export const achievementRules = defineRules([
                 ctx.addProgress(friendship.userLow, ctx.achievementId, 1),
                 ctx.addProgress(friendship.userHigh, ctx.achievementId, 1),
             ]);
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 2,
+        description: "¡Presente!",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.attendance_status === "CHECKED_IN") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "CHECKED_IN") {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.created",
+        achievementId: 3,
+        description: "CEO de reservaciones",
+        handler: async (ctx, payload) => {
+            const owner = payload.participants.find((p) => p.ownership_priority === 0);
+            if (owner) {
+                await ctx.addProgress(owner.user_id, ctx.achievementId, 1);
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 4,
+        description: "No me olvides",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.attendance_status === "NO_SHOW") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "NO_SHOW") {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.created",
+        achievementId: 5,
+        description: "La casa invita",
+        handler: async (ctx, payload) => {
+            const owner = payload.participants.find((p) => p.ownership_priority === 0);
+            if (owner) {
+                await ctx.addProgress(owner.user_id, ctx.achievementId, payload.participants.length);
+            }
+        },
+    }),
+    defineRule({
+        event: "parking.reservation.attendance_updated",
+        achievementId: 6,
+        description: "Quemando llanta",
+        handler: async (ctx, reservation) => {
+            if (reservation.attendance_status === "CHECKED_IN"
+                && (reservation.start_time.getTime() + CHECKIN_TOLERANCE_MINUTES * MINUTES_TO_MS - 5 * MINUTES_TO_MS) < reservation.updated_at.getTime()
+                && reservation.updated_at.getTime() < (reservation.start_time.getTime() + CHECKIN_TOLERANCE_MINUTES * MINUTES_TO_MS)
+            ) {
+                await ctx.addProgress(reservation.user_id, ctx.achievementId, 1);
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 7,
+        description: "Deja abajo",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.lifecycle_status === "FINALIZED") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "REJECTED") {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 8,
+        description: "Madrugador",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.lifecycle_status === "FINALIZED") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "CHECKED_IN" && payload.reservation.start_time.getHours() <= 9) {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 9,
+        description: "Indeciso",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.lifecycle_status === "FINALIZED") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "CANCELED") {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 10,
+        description: "Extrovertido",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.attendance_status === "CHECKED_OUT") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "CHECKED_IN" && payload.participants.length > 5) {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
+        },
+    }),
+    defineRule({
+        event: "office.reservation.attendance_updated",
+        achievementId: 11,
+        description: "Lobo solitario",
+        handler: async (ctx, payload) => {
+            if (payload.reservation.attendance_status === "CHECKED_OUT") {
+                payload.participants.forEach(async (p) => {
+                    if (p.attendance_status === "CHECKED_IN" && payload.participants.length === 1) {
+                        await ctx.addProgress(p.user_id, ctx.achievementId, 1);
+                    }
+                });
+            }
         },
     }),
 ]);
