@@ -26,7 +26,7 @@ import {
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 import { Roles } from '../../shared/types/role.type.js';
 import { Queue } from 'bullmq';
-import { OfficeNoShowJobData, OfficeCheckoutJobData } from '../../infra/queue/office-queue.js';
+import { OfficeNoShowJobData, OfficeCheckoutJobData, OfficeUnblockJobData } from '../../infra/queue/office-queue.js';
 import { OfficeEventsEmitter } from '../../infra/events/office-events.emitter.js';
 
 const CHECKIN_TOLERANCE_MINUTES = 30;
@@ -41,6 +41,10 @@ function checkoutJobId(reservationId: number): string {
     return `office-checkout-${reservationId}`;
 }
 
+function unblockReservableJobId(reservableId: number): string {
+    return `office-unblock-reservable-${reservableId}`;
+}
+
 function noShowDelay(startTime: Date): number {
     const triggerAt = startTime.getTime() + CHECKIN_TOLERANCE_MINUTES * 60_000;
     return Math.max(0, triggerAt - Date.now());
@@ -48,6 +52,10 @@ function noShowDelay(startTime: Date): number {
 
 function checkoutDelay(endTime: Date): number {
     return Math.max(0, endTime.getTime() - Date.now());
+}
+
+function unblockReservableDelay(unblockAt: Date): number {
+    return Math.max(0, unblockAt.getTime() - Date.now());
 }
 
 // State machine assertions
@@ -106,7 +114,7 @@ function maskParticipants(
 export type OfficeSlotsServiceDeps = {
     repo: OfficeSlotsRepo;
     friendshipService: FriendshipService;
-    queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData>;
+    queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData | OfficeUnblockJobData>;
     emitter: OfficeEventsEmitter;
 };
 
@@ -210,8 +218,33 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     };
 
     const updateReservable = async (id: number, data: UpdateReservable): Promise<Reservable> => {
-        const slot = await repo.updateReservable(id, data);
+        if (data.blockExpiresAt) data.is_blocked = true;
+        const { blockExpiresAt, ...dbData } = data;
+        const slot = await repo.updateReservable(id, dbData);
         if (!slot) throw new NotFoundError(`El slot ${id} no existe`);
+        if (data.blockExpiresAt) {
+            const jobId = unblockReservableJobId(id);
+
+            const existing = await queue.getJob(jobId);
+            if (existing) {
+                await existing.remove();
+            }
+
+            await queue.add(
+                'unblock-reservable',
+                { reservableId: id },
+                {
+                    delay: unblockReservableDelay(data.blockExpiresAt),
+                    jobId,
+                }
+            );
+        }
+        if (data.is_blocked === false) {
+            if (await queue.getJob(unblockReservableJobId(id))) {
+                await queue.remove(unblockReservableJobId(id)).catch(() => { });
+            }
+        }
+
         emitter.emit('slot.updated', slot);
         return slot;
     };

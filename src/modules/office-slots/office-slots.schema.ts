@@ -73,7 +73,7 @@ export const ReservableSchema = z.object({
 });
 
 export const CreateReservableSchema = ReservableSchema.omit({ id: true });
-export const UpdateReservableSchema = CreateReservableSchema.partial();
+export const UpdateReservableSchema = CreateReservableSchema.partial().extend({ blockExpiresAt: z.coerce.date().optional() });
 
 export type Reservable = z.infer<typeof ReservableSchema>;
 export type CreateReservable = z.infer<typeof CreateReservableSchema>;

@@ -13,6 +13,7 @@ import type { FriendshipService } from "../friendship/friendship.service.js";
 import type { AchievementsService } from "../achievements/achievements.service.js";
 import type { UserStatusService } from "./user-status.service.js";
 import { ForbiddenError, InternalError, NotFoundError } from "../../shared/errors/AppError.js";
+import { userEvents } from "../../infra/events/index.js";
 
 export type UserService = {
     getAll: () => Promise<User[]>;
@@ -184,17 +185,24 @@ export function makeUserService(
     };
 
     const createGuest = async (name: string, email: string, invitedByEId: string): Promise<Guest> => {
-        return repo.createGuest(name, email, invitedByEId);
+        const guest = await repo.createGuest(name, email, invitedByEId);
+        userEvents.emit("guest.created", guest);
+        return guest;
     };
 
     const updateGuest = async (guestId: number, name?: string, email?: string): Promise<Guest> => {
         const updated = await repo.updateGuest(guestId, name, email);
         if (!updated) throw new NotFoundError("Invitado no encontrado");
+        userEvents.emit("guest.updated", updated);
         return updated;
     };
 
     const removeGuest = async (guestId: number): Promise<boolean> => {
-        return repo.removeGuest(guestId);
+        const removed = await repo.removeGuest(guestId);
+        if (removed) {
+            userEvents.emit("guest.deleted", guestId);
+        }
+        return removed;
     };
 
     const TEMPORARY_CREATE = async (eId: string, name: string, email: string, password: string, role: string): Promise<User> => {
@@ -210,7 +218,14 @@ export function makeUserService(
             return await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, createdRole.id);
         }
 
-        return await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, roles[0].id);
+        await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, roles[0].id);
+        const user = await getById(eId);
+
+        if (user) {
+            userEvents.emit("user.created", user);
+        }
+
+        return user as User;
     };
 
     return {
