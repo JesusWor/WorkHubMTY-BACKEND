@@ -73,6 +73,16 @@ export const ReservableSchema = z.object({
     is_blocked: z.boolean(),
 });
 
+const OccupiedRange = z.object({
+    id:z.number(),
+    startTime:z.string(),
+    endTime:z.string()
+})
+
+export const DetailedReservableSchema = ReservableSchema.extend({
+    timeline:z.array(OccupiedRange)
+});
+
 export const CreateReservableSchema = ReservableSchema.omit({ id: true, status: true }).extend({
     floor_id: z.number().int(),
 });
@@ -206,6 +216,7 @@ export type ListReservationsPage = z.infer<typeof ListReservationsPageSchema>;
 
 export const ReservationIdParamSchema = z.object({
     id: z.coerce.number().int().positive(),
+    detail: z.boolean().optional().default(false),
 });
 
 export const AvailableReservablesQuerySchema = z.object({

@@ -29,7 +29,7 @@ export type OfficeSlotsRepo = {
     // Reservables
     getAllReservables: () => Promise<Reservable[]>;
     getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
-    getReservableById: (id: number) => Promise<Reservable | null>;
+    getReservableById: (id: number, detail?: boolean) => Promise<Reservable | null>;
     createReservable: (data: CreateReservable) => Promise<Reservable | null>;
     updateReservable: (
         id: number,
@@ -256,7 +256,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         return rows;
     }
 
-    const getReservableById = async (id: number): Promise<Reservable | null> => {
+    const getReservableById = async (id: number, detail = false): Promise<Reservable | null> => {
         const { rows } = await db.query(
             `SELECT id, name, capacity, floor_id, is_blocked FROM reservables WHERE id = ?`,
             [id],

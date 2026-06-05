@@ -115,7 +115,7 @@ export type OfficeSlotsService = {
     // Reservables
     getAllReservables: () => Promise<Reservable[]>;
     getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
-    getReservableById: (id: number) => Promise<Reservable>;
+    getReservableById: (id: number, detail?: boolean) => Promise<Reservable>;
     createReservable: (data: CreateReservable) => Promise<Reservable>;
     updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
     deleteReservable: (id: number) => Promise<void>;
@@ -203,8 +203,8 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     };
 
 
-    const getReservableById = async (id: number): Promise<Reservable> => {
-        const slot = await repo.getReservableById(id);
+    const getReservableById = async (id: number, detail?: boolean): Promise<Reservable> => {
+        const slot = await repo.getReservableById(id, detail);
         if (!slot) throw new NotFoundError(`El slot ${id} no existe`);
         return slot;
     };

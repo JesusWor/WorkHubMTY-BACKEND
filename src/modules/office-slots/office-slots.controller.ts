@@ -64,7 +64,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
-        const slot = await service.getReservableById(parsed.data.id);
+        const slot = await service.getReservableById(parsed.data.id, parsed.data.detail ?? false);
         GlobalResponse.okWithData(res, slot);
     };
 
