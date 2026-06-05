@@ -13,6 +13,7 @@ import {
     inferReservationLifecycle,
     AvailableReservablesQuery,
     CreateReservable,
+    ReservationSummary,
 } from './office-slots.schema.js';
 
 type ReservationRow = Omit<Reservation, 'lifecycle_status' | 'reservable' | 'participants'>;
@@ -36,7 +37,12 @@ export type OfficeSlotsRepo = {
         fields: Partial<Omit<Reservable, 'id'>>,
     ) => Promise<Reservable | null>;
     deleteReservable: (id: number) => Promise<boolean>;
+    getReservationSummariesBySlot: (
+        slotId: number,
+        dates?: Date[],
+    ) => Promise<ReservationSummary[]>;
 
+    getReservationDetailsBySlot: (slotId: number, dates?: Date[]) => Promise<Reservation[]>;
     // Reservations
     getReservationById: (id: number) => Promise<Reservation | null>;
     getReservationWithParticipants: (id: number) => Promise<ReservationWithParticipants | null>;
@@ -144,7 +150,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             ...r,
             is_blocked: Boolean(r.is_blocked),
         })) as Reservable[];
-    };  
+    };
 
     async function getAvailableReservables(
         filters: AvailableReservablesQuery,
@@ -296,6 +302,72 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     const deleteReservable = async (id: number): Promise<boolean> => {
         const { affectedCount } = await db.execute(`DELETE FROM reservables WHERE id = ?`, [id]);
         return affectedCount > 0;
+    };
+    const getReservationSummariesBySlot = async (
+        slotId: number,
+        dates?: Date[],
+    ): Promise<ReservationSummary[]> => {
+        const params: unknown[] = [slotId];
+        let dateFilter = '';
+
+        if (dates && dates.length >= 2) {
+            dateFilter = `
+            AND r.start_time < ?
+            AND r.end_time > ?
+        `;
+            params.push(dates[1], dates[0]);
+        }
+
+        const { rows } = await db.query(
+            `
+        SELECT
+            r.id,
+            r.reservable_id,
+            r.start_time,
+            r.end_time,
+            r.attendance_status,
+            res.name AS reservable_name,
+            res.floor_id,
+            f.name AS floor_name
+        FROM reservations r
+        JOIN reservables res ON res.id = r.reservable_id
+        JOIN floors f ON f.id = res.floor_id
+        WHERE r.reservable_id = ?
+        ${dateFilter}
+        ORDER BY r.start_time ASC
+        `,
+            params,
+        );
+
+        return rows as ReservationSummary[];
+    };
+    const getReservationDetailsBySlot = async (
+        slotId: number,
+        dates?: Date[],
+    ): Promise<Reservation[]> => {
+        const params: unknown[] = [slotId];
+        let dateFilter = '';
+
+        if (dates && dates.length >= 2) {
+            dateFilter = `
+            AND r.start_time < ?
+            AND r.end_time > ?
+        `;
+            params.push(dates[1], dates[0]);
+        }
+
+        const { rows } = await db.query(
+            `
+        SELECT ${RESERVATION_FIELDS}
+        FROM reservations r
+        WHERE r.reservable_id = ?
+        ${dateFilter}
+        ORDER BY r.start_time ASC
+        `,
+            params,
+        );
+
+        return rows.map((row) => hydrateReservation(row as ReservationRow));
     };
 
     // Reservations
@@ -717,6 +789,8 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         createReservable,
         updateReservable,
         deleteReservable,
+        getReservationDetailsBySlot,
+        getReservationSummariesBySlot,
 
         getReservationById,
         getReservationWithParticipants,

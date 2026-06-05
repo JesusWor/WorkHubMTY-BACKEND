@@ -26,6 +26,12 @@ export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router
         asyncHandler(controller.getAvailableReservables),
     );
     router.post(
+        '/slots/:id/reservations',
+        authenticate,
+        authorize({ allow: INTERNAL_ROLES }),
+        asyncHandler(controller.getReservationsForSlot),
+    );
+    router.post(
         '/slots',
         authenticate,
         authorize({ allow: SUPERVISOR_ROLES }),

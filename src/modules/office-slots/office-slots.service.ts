@@ -17,6 +17,7 @@ import {
     NON_CANCELABLE_STATUSES,
     PARTICIPANT_USER_TRANSITIONS,
     AvailableReservablesQuery,
+    ReservationSummary,
 } from './office-slots.schema.js';
 import {
     BadRequestError,
@@ -119,6 +120,11 @@ export type OfficeSlotsService = {
     createReservable: (data: CreateReservable) => Promise<Reservable>;
     updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
     deleteReservable: (id: number) => Promise<void>;
+    getReservationsForSlot: (
+        slotId: number,
+        dates?: Date[],
+        detail?: boolean,
+    ) => Promise<Reservation[] | ReservationSummary[]>;
 
     // Reservations
     listReservations: (
@@ -197,11 +203,12 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     const getAllReservables = async (): Promise<Reservable[]> => {
         return repo.getAllReservables();
     };
-    
-    const getAvailableReservables = async (query: AvailableReservablesQuery): Promise<Reservable[]> => {
+
+    const getAvailableReservables = async (
+        query: AvailableReservablesQuery,
+    ): Promise<Reservable[]> => {
         return repo.getAvailableReservables(query);
     };
-
 
     const getReservableById = async (id: number, detail?: boolean): Promise<Reservable> => {
         const slot = await repo.getReservableById(id, detail);
@@ -227,6 +234,18 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const deleted = await repo.deleteReservable(id);
         if (!deleted) throw new NotFoundError(`El slot ${id} no existe`);
         emitter.emit('slot.deleted', id);
+    };
+
+    const getReservationsForSlot = async (
+        slotId: number,
+        dates?: Date[],
+        detail = false,
+    ): Promise<Reservation[] | ReservationSummary[]> => {
+        if (detail) {
+            return repo.getReservationDetailsBySlot(slotId, dates);
+        }
+
+        return repo.getReservationSummariesBySlot(slotId, dates);
     };
 
     // Reservations
@@ -546,6 +565,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         createReservable,
         updateReservable,
         deleteReservable,
+        getReservationsForSlot,
 
         listReservations,
         getReservationDetail,

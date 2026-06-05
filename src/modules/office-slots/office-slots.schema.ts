@@ -113,6 +113,13 @@ export const ReservationSchema = z.object({
 
 export type Reservation = z.infer<typeof ReservationSchema>;
 
+export type ReservationSummary = Pick<Reservation, 'id' | 'start_time' | 'end_time' | 'attendance_status'> & {
+    reservable_id: number;
+    reservable_name: string;
+    floor_id: number;
+    floor_name: string;
+};
+
 // Participant
 
 export const ParticipantSchema = z.object({
@@ -216,7 +223,14 @@ export type ListReservationsPage = z.infer<typeof ListReservationsPageSchema>;
 
 export const ReservationIdParamSchema = z.object({
     id: z.coerce.number().int().positive(),
-    detail: z.boolean().optional().default(false),
+});
+
+export const ReservationDetailQuerySchema = z.object({
+    detail: z.coerce.boolean().optional().default(false),
+});
+
+export const ReservationIdBodySchema = z.object({
+    dates: z.array(z.coerce.date()).optional(),
 });
 
 export const AvailableReservablesQuerySchema = z.object({

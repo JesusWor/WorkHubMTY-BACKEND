@@ -12,6 +12,8 @@ import {
     ParticipantIdParamSchema,
     UserIdParamSchema,
     AvailableReservablesQuerySchema,
+    ReservationIdBodySchema,
+    ReservationDetailQuerySchema,
 } from './office-slots.schema.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
@@ -23,6 +25,7 @@ export type OfficeSlotsController = {
     createReservable: (req: Request, res: Response) => Promise<void>;
     updateReservable: (req: Request, res: Response) => Promise<void>;
     deleteReservable: (req: Request, res: Response) => Promise<void>;
+    getReservationsForSlot: (req: Request, res: Response) => Promise<void>;
 
     // Reservations
     listReservations: (req: Request, res: Response) => Promise<void>;
@@ -46,7 +49,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         const slots = await service.getAllReservables();
         GlobalResponse.okWithData(res, slots);
     };
-    
+
     const getAvailableReservables = async (_req: Request, res: Response): Promise<void> => {
         const parsed = AvailableReservablesQuerySchema.safeParse(_req.query);
         if (!parsed.success) {
@@ -57,14 +60,15 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         GlobalResponse.okWithData(res, slots);
     };
 
-
     const getReservableById = async (req: Request, res: Response): Promise<void> => {
         const parsed = ReservationIdParamSchema.safeParse(req.params);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;
         }
-        const slot = await service.getReservableById(parsed.data.id, parsed.data.detail ?? false);
+        const parsedQuery = ReservationDetailQuerySchema.safeParse(req.query);
+
+        const slot = await service.getReservableById(parsed.data.id, parsedQuery.data ? parsedQuery.data.detail : undefined);
         GlobalResponse.okWithData(res, slot);
     };
 
@@ -101,6 +105,36 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         }
         await service.deleteReservable(parsed.data.id);
         GlobalResponse.ok(res, `Slot ${parsed.data.id} eliminado`);
+    };
+    const getReservationsForSlot = async (req: Request, res: Response): Promise<void> => {
+        const parsedParams = ReservationIdParamSchema.safeParse(req.params);
+
+        if (!parsedParams.success) {
+            GlobalResponse.zodError(res, parsedParams.error);
+            return;
+        }
+
+        const parsedQuery = ReservationDetailQuerySchema.safeParse(req.query);
+
+        if (!parsedQuery.success) {
+            GlobalResponse.zodError(res, parsedQuery.error);
+            return;
+        }
+
+        const parsedBody = ReservationIdBodySchema.safeParse(req.body ?? {});
+
+        if (!parsedBody.success) {
+            GlobalResponse.zodError(res, parsedBody.error);
+            return;
+        }
+
+        const reservations = await service.getReservationsForSlot(
+            parsedParams.data.id,
+            parsedBody.data.dates,
+            parsedQuery.data.detail,
+        );
+
+        GlobalResponse.okWithData(res, reservations);
     };
 
     // Reservations
@@ -238,6 +272,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         createReservable,
         updateReservable,
         deleteReservable,
+        getReservationsForSlot,
 
         listReservations,
         getReservationDetail,
