@@ -11,6 +11,7 @@ import {
     CreateReservable,
     UpdateReservable,
     CreateReservationBatch,
+    BlockBatch,
     ListReservationsQuery,
     ListReservationsPage,
     RESERVATION_TRANSITIONS,
@@ -24,9 +25,9 @@ import {
     NotFoundError,
 } from '../../shared/errors/AppError.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
-import { Roles } from '../../shared/types/role.type.js';
+import { Roles, SUPERVISOR_ROLES } from '../../shared/types/role.type.js';
 import { Queue } from 'bullmq';
-import { OfficeNoShowJobData, OfficeCheckoutJobData, OfficeUnblockJobData } from '../../infra/queue/office-queue.js';
+import { OfficeNoShowJobData, OfficeCheckoutJobData } from '../../infra/queue/office-queue.js';
 import { OfficeEventsEmitter } from '../../infra/events/office-events.emitter.js';
 
 const CHECKIN_TOLERANCE_MINUTES = 30;
@@ -41,10 +42,6 @@ function checkoutJobId(reservationId: number): string {
     return `office-checkout-${reservationId}`;
 }
 
-function unblockReservableJobId(reservableId: number): string {
-    return `office-unblock-reservable-${reservableId}`;
-}
-
 function noShowDelay(startTime: Date): number {
     const triggerAt = startTime.getTime() + CHECKIN_TOLERANCE_MINUTES * 60_000;
     return Math.max(0, triggerAt - Date.now());
@@ -52,10 +49,6 @@ function noShowDelay(startTime: Date): number {
 
 function checkoutDelay(endTime: Date): number {
     return Math.max(0, endTime.getTime() - Date.now());
-}
-
-function unblockReservableDelay(unblockAt: Date): number {
-    return Math.max(0, unblockAt.getTime() - Date.now());
 }
 
 // State machine assertions
@@ -114,7 +107,7 @@ function maskParticipants(
 export type OfficeSlotsServiceDeps = {
     repo: OfficeSlotsRepo;
     friendshipService: FriendshipService;
-    queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData | OfficeUnblockJobData>;
+    queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData>;
     emitter: OfficeEventsEmitter;
 };
 
@@ -125,6 +118,10 @@ export type OfficeSlotsService = {
     createReservable: (data: CreateReservable) => Promise<Reservable>;
     updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
     deleteReservable: (id: number) => Promise<void>;
+
+    // Blocks
+    createBlockBatch: (data: BlockBatch) => Promise<ReservationWithParticipants[]>;
+    cancelBlock: (id: number) => Promise<void>;
 
     // Reservations
     listReservations: (
@@ -218,33 +215,9 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     };
 
     const updateReservable = async (id: number, data: UpdateReservable): Promise<Reservable> => {
-        if (data.blockExpiresAt) data.is_blocked = true;
         const { blockExpiresAt, ...dbData } = data;
         const slot = await repo.updateReservable(id, dbData);
         if (!slot) throw new NotFoundError(`El slot ${id} no existe`);
-        if (data.blockExpiresAt) {
-            const jobId = unblockReservableJobId(id);
-
-            const existing = await queue.getJob(jobId);
-            if (existing) {
-                await existing.remove();
-            }
-
-            await queue.add(
-                'unblock-reservable',
-                { reservableId: id },
-                {
-                    delay: unblockReservableDelay(data.blockExpiresAt),
-                    jobId,
-                }
-            );
-        }
-        if (data.is_blocked === false) {
-            if (await queue.getJob(unblockReservableJobId(id))) {
-                await queue.remove(unblockReservableJobId(id)).catch(() => { });
-            }
-        }
-
         emitter.emit('office.slot.updated', slot);
         return slot;
     };
@@ -304,9 +277,6 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     ): Promise<ReservationWithParticipants[]> => {
         const slot = await repo.getReservableById(data.reservable_id);
         if (!slot) throw new NotFoundError(`El slot ${data.reservable_id} no existe`);
-        if (slot.is_blocked) {
-            throw new ForbiddenError('Este slot está bloqueado');
-        }
 
         const created = await repo.createReservationBatch(
             caller.eId,
@@ -350,10 +320,14 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
 
     const cancelReservation = async (id: number, caller: JwtPayload): Promise<Reservation> => {
         const isAdmin = caller.role === Roles.ADMIN;
+        const isSupervisor = (SUPERVISOR_ROLES as readonly string[]).includes(caller.role);
         const res = await repo.getReservationWithParticipants(id);
         if (!res) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        if (!isAdmin) {
+        // Los bloqueos pueden ser cancelados por cualquier supervisor
+        if ((res.category as string) === 'BLOCKED') {
+            if (!isSupervisor) throw new ForbiddenError('Solo un supervisor puede cancelar un bloqueo');
+        } else if (!isAdmin) {
             // El "owner activo" es el participante con menor ownership_priority
             const activeOwner = (res.participants as Participant[])
                 .filter(p => !PARTICIPANT_TERMINAL_STATUSES.includes(p.attendance_status))
@@ -565,12 +539,51 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         return { user_id: targetUserId, reservations: masked };
     };
 
+    // Block
+
+    const createBlockBatch = async (data: BlockBatch): Promise<ReservationWithParticipants[]> => {
+        const slot = await repo.getReservableById(data.reservable_id);
+        if (!slot) throw new NotFoundError(`El slot ${data.reservable_id} no existe`);
+
+        const created = await repo.createReservationBatch(
+            'system',
+            data.reservable_id,
+            'BLOCKED',
+            data.description,
+            data.timestamps,
+            [],
+        );
+
+        if (!created.length) throw new ConflictError('No fue posible crear ningún bloqueo (todos los timestamps empalman con reservas existentes)');
+
+        return created;
+    };
+
+    const cancelBlock = async (id: number): Promise<void> => {
+        const res = await repo.getReservationWithParticipants(id);
+        if (!res) throw new NotFoundError(`El bloqueo ${id} no existe`);
+        if ((res.category as string) !== 'BLOCKED') throw new BadRequestError(`La reservación ${id} no es un bloqueo`);
+        if (res.attendance_status === 'CANCELED') throw new ConflictError('El bloqueo ya está cancelado');
+
+        const updated = await repo.cancelReservation(id);
+        if (!updated) throw new NotFoundError(`El bloqueo ${id} no existe`);
+
+        emitter.emit('office.reservation.canceled', {
+            reservation: updated,
+            participants: res.participants as Participant[],
+            reservable: res.reservable,
+        });
+    };
+
     return {
         getAllReservables,
         getReservableById,
         createReservable,
         updateReservable,
         deleteReservable,
+
+        createBlockBatch,
+        cancelBlock,
 
         listReservations,
         getReservationDetail,

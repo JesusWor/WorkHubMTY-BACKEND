@@ -161,6 +161,26 @@ export const CreateReservationBatchSchema = z
 
 export type CreateReservationBatch = z.infer<typeof CreateReservationBatchSchema>;
 
+export const BlockBatchSchema = z
+    .object({
+        reservable_id: z.number().int().positive(),
+        description: z.string().max(255).default(''),
+        timestamps: z.array(TimestampPairSchema).min(1, 'Se requiere al menos 1 timestamp'),
+    })
+    .refine(
+        (d) => {
+            const unique = new Set(
+                d.timestamps.map(
+                    (t) => `${t.start_time.toISOString()}-${t.end_time.toISOString()}`,
+                ),
+            );
+            return unique.size === d.timestamps.length;
+        },
+        { message: 'Los timestamps no pueden repetirse', path: ['timestamps'] },
+    );
+
+export type BlockBatch = z.infer<typeof BlockBatchSchema>;
+
 export const PatchReservationAttendanceSchema = z.object({
     attendance_status: ReservationAttendanceStatusSchema,
 });

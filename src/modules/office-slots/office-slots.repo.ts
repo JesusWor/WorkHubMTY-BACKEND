@@ -86,10 +86,6 @@ export type OfficeSlotsRepo = {
         }
         | { action: 'skipped'; reason: string }
     >;
-    unblockReservable: (reservableId: number) => Promise<
-        | { marked: true; reservable: Reservable }
-        | { marked: false; reason: string }
-    >;
     getPendingNoShowReservations: (
         checkinToleranceMinutes: number,
     ) => Promise<Array<Pick<Reservation, 'id' | 'start_time'>>>;
@@ -310,6 +306,18 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const created: ReservationWithParticipants[] = [];
 
         for (const ts of timestamps) {
+            // Verificar empalme: ignorar timestamps que colisionen con reservas activas
+            const { rows: overlapping } = await db.query(
+                `SELECT id FROM reservations
+                 WHERE reservable_id = ?
+                   AND attendance_status NOT IN ('CANCELED')
+                   AND start_time < ?
+                   AND end_time > ?
+                 LIMIT 1`,
+                [reservableId, ts.end_time, ts.start_time],
+            );
+            if ((overlapping as unknown[]).length > 0) continue;
+
             const { insertId: reservationId } = await db.execute(
                 `INSERT INTO reservations (reservable_id, category, start_time, end_time, description, attendance_status)
                  VALUES (?, ?, ?, ?, ?, 'NOT_ARRIVED')`,
@@ -535,25 +543,6 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         };
     };
 
-    const unblockReservable = async (
-        reservableId: number,
-    ): Promise<
-        | { marked: true; reservable: Reservable }
-        | { marked: false; reason: string }
-    > => {
-        const { affectedCount } = await db.execute(
-            `UPDATE reservables
-             SET is_blocked = 0
-             WHERE id = ?;`,
-            [reservableId],
-        );
-        const newReservable = await getReservableById(reservableId);
-        if (newReservable?.is_blocked === false) {
-            return { marked: true, reservable: newReservable };
-        }
-        return { marked: false, reason: 'No se pudo desbloquear el slot' };
-    };
-
     const getPendingNoShowReservations = async (
         checkinToleranceMinutes: number,
     ): Promise<Array<Pick<Reservation, 'id' | 'start_time'>>> => {
@@ -603,7 +592,6 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
         markNoShowForReservation,
         markCheckoutForReservation,
-        unblockReservable,
         getPendingNoShowReservations,
         getPendingCheckoutReservations,
     };
