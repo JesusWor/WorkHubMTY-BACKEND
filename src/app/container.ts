@@ -89,6 +89,7 @@ export function buildContainer() {
     const officeWorker = createOfficeWorker({
         markNoShowForReservation: (id) => officeSlotsRepo.markNoShowForReservation(id),
         markCheckoutForReservation: (id) => officeSlotsRepo.markCheckoutForReservation(id),
+        unblockReservable: (reservableId) => officeSlotsRepo.unblockReservable(reservableId),
         getReservableById: (id) => officeSlotsRepo.getReservableById(id),
     });
     const parkingWorker = createParkingWorker({

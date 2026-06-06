@@ -95,6 +95,10 @@ export type OfficeSlotsRepo = {
           }
         | { action: 'skipped'; reason: string }
     >;
+    unblockReservable: (reservableId: number) => Promise<
+        | { marked: true; reservable: Reservable }
+        | { marked: false; reason: string }
+    >;
     getPendingNoShowReservations: (
         checkinToleranceMinutes: number,
     ) => Promise<Array<Pick<Reservation, 'id' | 'start_time'>>>;
@@ -756,6 +760,25 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         };
     };
 
+    const unblockReservable = async (
+        reservableId: number,
+    ): Promise<
+        | { marked: true; reservable: Reservable }
+        | { marked: false; reason: string }
+    > => {
+        const { affectedCount } = await db.execute(
+            `UPDATE reservables
+             SET is_blocked = 0
+             WHERE id = ?;`,
+            [reservableId],
+        );
+        const newReservable = await getReservableById(reservableId);
+        if (newReservable?.is_blocked === false) {
+            return { marked: true, reservable: newReservable };
+        }
+        return { marked: false, reason: 'No se pudo desbloquear el slot' };
+    };
+
     const getPendingNoShowReservations = async (
         checkinToleranceMinutes: number,
     ): Promise<Array<Pick<Reservation, 'id' | 'start_time'>>> => {
@@ -808,6 +831,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
         markNoShowForReservation,
         markCheckoutForReservation,
+        unblockReservable,
         getPendingNoShowReservations,
         getPendingCheckoutReservations,
     };

@@ -12,8 +12,12 @@ export type OfficeNoShowJobData = {
 export type OfficeCheckoutJobData = {
     reservationId: number;
 };
+export type OfficeUnblockJobData = {
+    reservableId: number;
+};
 
-export type OfficeJobData = OfficeNoShowJobData | OfficeCheckoutJobData;
+
+export type OfficeJobData = OfficeNoShowJobData | OfficeCheckoutJobData | OfficeUnblockJobData;
 
 export const OFFICE_QUEUE_NAME = "office";
 

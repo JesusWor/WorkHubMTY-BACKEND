@@ -73,21 +73,10 @@ export const ReservableSchema = z.object({
     is_blocked: z.boolean(),
 });
 
-const OccupiedRange = z.object({
-    id:z.number(),
-    startTime:z.string(),
-    endTime:z.string()
-})
-
-export const DetailedReservableSchema = ReservableSchema.extend({
-    timeline:z.array(OccupiedRange)
+export const CreateReservableSchema = ReservableSchema.omit({ id: true, floor:true }).extend({
+    floor_id:z.number().positive()
 });
-
-export const CreateReservableSchema = ReservableSchema.omit({ id: true, status: true }).extend({
-    floor_id: z.number().int(),
-});
-
-export const UpdateReservableSchema = CreateReservableSchema.partial();
+export const UpdateReservableSchema = CreateReservableSchema.partial().extend({ blockExpiresAt: z.coerce.date().optional() });
 
 export type Reservable = z.infer<typeof ReservableSchema>;
 export type CreateReservable = z.infer<typeof CreateReservableSchema>;

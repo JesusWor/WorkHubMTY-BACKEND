@@ -1,6 +1,7 @@
 import { FriendshipRepo } from "./friendship.repo.js";
 import { Friendship, FriendRequest, Source, FriendRequests, SentFriendRequest } from "./friendship.schema.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/AppError.js";
+import { userEvents } from "../../infra/events/index.js";
 
 export type FriendshipService = {
     getAll: () => Promise<Friendship[]>;
@@ -43,6 +44,8 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         const friendship = await repo.createFriendship(userLow, userHigh, source);
         if (!friendship) throw new ConflictError("Friendship already exists");
 
+        userEvents.emit("friendship.created", friendship);
+
         return friendship;
     };
 
@@ -53,6 +56,8 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
 
         const removed = await repo.removeFriendship(userLow, userHigh);
         if (!removed) throw new NotFoundError("Friendship not found");
+
+        userEvents.emit("friendship.removed", userLow, userHigh);
 
         return true;
     };
@@ -90,6 +95,8 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         const friendship = createFriendship(fromUser, toUser, "REQUEST");
         if (!friendship) throw new ConflictError("Friendship already exists");
 
+        userEvents.emit("friendRequest.accepted", accepted);
+
         return friendship;
     };
 
@@ -99,6 +106,8 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         const cancelled = await repo.cancelRequest(fromUser, toUser);
         if (!cancelled) throw new NotFoundError("Pending friend request not found");
 
+        userEvents.emit("friendRequest.canceled", cancelled);
+
         return true;
     };
 
@@ -107,6 +116,8 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
 
         const rejected = await repo.rejectRequest(toUser, fromUser);
         if (!rejected) throw new NotFoundError("Pending friend request not found");
+
+        userEvents.emit("friendRequest.rejected", rejected);
 
         return true;
     };
