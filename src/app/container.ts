@@ -1,8 +1,15 @@
 import { createDb } from "../infra/db/db.js";
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
-import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from "../modules/user/index.js";
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
+import {
+    makeUserRepo,
+    makeUserService,
+    makeUserStatusService,
+    makeUserController,
+    makeUserRouter,
+    makeUserStatsRepo,
+    makeUserStatsService,
+} from "../modules/user/index.js"; import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import {
@@ -45,7 +52,11 @@ export function buildContainer() {
     initAchievementsListeners(achievementsService);
 
     const userStatusService = makeUserStatusService();
-    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
+    const userStatsRepo = makeUserStatsRepo(db);
+    const userStatsService = makeUserStatsService(userStatsRepo);
+    userStatsService.initListeners();
+    userStatsService.initScheduler();
+    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService, userStatsService);
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController);
 

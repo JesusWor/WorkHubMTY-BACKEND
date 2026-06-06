@@ -45,6 +45,7 @@ export const ProfileSchema = UserSchema.extend({
     friendCount: z.number(),
     levelsPassed: z.number(),
     hoursInOffice: z.number(),
+    ap: z.number(),
   },
 });
 
