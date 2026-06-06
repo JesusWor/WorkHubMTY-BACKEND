@@ -303,6 +303,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const { affectedCount } = await db.execute(`DELETE FROM reservables WHERE id = ?`, [id]);
         return affectedCount > 0;
     };
+    
     const getReservationSummariesBySlot = async (
         slotId: number,
         dates?: Date[],
@@ -310,12 +311,11 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const params: unknown[] = [slotId];
         let dateFilter = '';
 
-        if (dates && dates.length >= 2) {
-            dateFilter = `
-            AND r.start_time < ?
-            AND r.end_time > ?
-        `;
-            params.push(dates[1], dates[0]);
+        if (dates && dates.length > 0) {
+            const formattedDates = dates.map(d => d.toISOString().split('T')[0]);
+            dateFilter = `AND DATE(r.start_time) IN (${formattedDates.map(() => '?').join(',')})`;
+            params.push(...formattedDates);
+        
         }
 
         const { rows } = await db.query(
