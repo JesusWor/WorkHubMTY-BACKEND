@@ -22,6 +22,12 @@ import {
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
+import {
+    makeEventsRepo,
+    makeEventsService,
+    makeEventsController,
+    makeEventsRouter,
+} from '../modules/guest-events/index.js';
 import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
 
 import { officeEvents, parkingEvents, teamEvents, userEvents } from "../infra/events/index.js";
@@ -100,7 +106,6 @@ export function buildContainer() {
     const officeWorker = createOfficeWorker({
         markNoShowForReservation: (id) => officeSlotsRepo.markNoShowForReservation(id),
         markCheckoutForReservation: (id) => officeSlotsRepo.markCheckoutForReservation(id),
-        unblockReservable: (reservableId) => officeSlotsRepo.unblockReservable(reservableId),
         getReservableById: (id) => officeSlotsRepo.getReservableById(id),
     });
     const parkingWorker = createParkingWorker({
@@ -112,6 +117,11 @@ export function buildContainer() {
     const reportsSlotsService = makeReportsService(reportsRepo);
     const reportsController = makeReportsController(reportsSlotsService);
     const reportsRouter = makeReportsRouter(reportsController);
+
+    const eventsRepo = makeEventsRepo(db);
+    const eventsService = makeEventsService(eventsRepo, userRepo);
+    const eventsController = makeEventsController(eventsService);
+    const eventsRouter = makeEventsRouter(eventsController);
 
     const teamsRepo = makeTeamsRepo(db);
     const teamsService = makeTeamsService(teamsRepo, userStatusService);
@@ -136,6 +146,7 @@ export function buildContainer() {
         parkingSlotsRepo,
         parkingWorker,
         reportsRouter,
+        eventsRouter,
         teamsService,
     };
 };

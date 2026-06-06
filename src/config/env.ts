@@ -66,9 +66,7 @@ export const env = {
         refreshTokenExpiresMs: requireInt('REFRESH_TOKEN_EXPIRES_MS', 24 * 60 * 60 * 1000) // 24 hours
     },
     mail: {
-        host: requireString('SMTP_HOST'),
-        port: requireInt('SMTP_PORT', 587),
-        user: requireString('SMTP_USER'),
-        pass: requireString('SMTP_PASS'),
+        resendApiKey: requireString('RESEND_API_KEY'),
+        fromAddress: requireString('RESEND_FROM_ADDRESS'),
     },
 };
