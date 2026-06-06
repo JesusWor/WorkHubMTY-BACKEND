@@ -11,6 +11,9 @@ import {
     ListReservationsPage,
     ListReservationsCursorSchema,
     inferReservationLifecycle,
+    AvailableReservablesQuery,
+    CreateReservable,
+    ReservationSummary,
 } from './office-slots.schema.js';
 
 type ReservationRow = Omit<Reservation, 'lifecycle_status' | 'reservable' | 'participants'>;
@@ -26,14 +29,20 @@ function hydrateReservation(row: ReservationRow): Reservation {
 export type OfficeSlotsRepo = {
     // Reservables
     getAllReservables: () => Promise<Reservable[]>;
-    getReservableById: (id: number) => Promise<Reservable | null>;
-    createReservable: (data: Omit<Reservable, 'id'>) => Promise<Reservable | null>;
+    getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
+    getReservableById: (id: number, detail?: boolean) => Promise<Reservable | null>;
+    createReservable: (data: CreateReservable) => Promise<Reservable | null>;
     updateReservable: (
         id: number,
         fields: Partial<Omit<Reservable, 'id'>>,
     ) => Promise<Reservable | null>;
     deleteReservable: (id: number) => Promise<boolean>;
+    getReservationSummariesBySlot: (
+        slotId: number,
+        dates?: Date[],
+    ) => Promise<ReservationSummary[]>;
 
+    getReservationDetailsBySlot: (slotId: number, dates?: Date[]) => Promise<Reservation[]>;
     // Reservations
     getReservationById: (id: number) => Promise<Reservation | null>;
     getReservationWithParticipants: (id: number) => Promise<ReservationWithParticipants | null>;
@@ -80,10 +89,10 @@ export type OfficeSlotsRepo = {
     >;
     markCheckoutForReservation: (reservationId: number) => Promise<
         | {
-            action: 'checked_out' | 'no_show_fallback';
-            reservation: Reservation;
-            participants: Participant[];
-        }
+              action: 'checked_out' | 'no_show_fallback';
+              reservation: Reservation;
+              participants: Participant[];
+          }
         | { action: 'skipped'; reason: string }
     >;
     getPendingNoShowReservations: (
@@ -97,13 +106,163 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
     const getAllReservables = async (): Promise<Reservable[]> => {
         const { rows } = await db.query(
-            `SELECT id, name, capacity, floor_id, is_blocked FROM reservables ORDER BY id ASC`,
+            `
+        SELECT
+            r.id,
+            r.name,
+            r.code,
+            r.capacity,
+            f.name AS floor,
+            r.is_blocked,
+
+            CASE
+                WHEN r.is_blocked = 1 THEN 'blocked'
+
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM reservations res
+                    WHERE res.reservable_id = r.id
+                      AND res.category = 'RESERVATION'
+                      AND res.start_time < UTC_TIMESTAMP()
+                      AND res.end_time > UTC_TIMESTAMP()
+                ) THEN 'occupied'
+
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM reservations res
+                    WHERE res.reservable_id = r.id
+                      AND res.category = 'RESERVATION'
+                      AND res.start_time > UTC_TIMESTAMP()
+                      AND res.start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)
+                ) THEN 'soon'
+
+                ELSE 'available'
+            END AS status
+
+        FROM reservables r
+        JOIN floors f ON f.id = r.floor_id
+        ORDER BY r.id ASC
+        `,
             [],
         );
-        return rows.map((r) => ({ ...r, is_blocked: Boolean(r.is_blocked) })) as Reservable[];
+
+        return rows.map((r) => ({
+            ...r,
+            is_blocked: Boolean(r.is_blocked),
+        })) as Reservable[];
     };
 
-    const getReservableById = async (id: number): Promise<Reservable | null> => {
+    async function getAvailableReservables(
+        filters: AvailableReservablesQuery,
+    ): Promise<Reservable[]> {
+        const where: string[] = ['1 = 1'];
+        const params: unknown[] = [];
+
+        if (filters.floorId !== undefined) {
+            where.push('r.floor_id = ?');
+            params.push(filters.floorId);
+        }
+
+        if (filters.minCapacity !== undefined) {
+            where.push('r.capacity >= ?');
+            params.push(filters.minCapacity);
+        }
+
+        if (filters.maxCapacity !== undefined) {
+            where.push('r.capacity <= ?');
+            params.push(filters.maxCapacity);
+        }
+
+        if (filters.query?.trim()) {
+            where.push('(r.name LIKE ? OR r.code LIKE ?)');
+            params.push(`%${filters.query.trim()}%`, `%${filters.query.trim()}%`);
+        }
+
+        /**
+         * Disponibilidad por horario:
+         * Si viene startTime/endTime, excluimos reservables que tengan
+         * reservaciones empalmadas en ese rango.
+         */
+        if (filters.startTime && filters.endTime) {
+            if (filters.daysToApply && filters.daysToApply.length > 0) {
+                const dayConditions: string[] = [];
+
+                for (const day of filters.daysToApply) {
+                    dayConditions.push(`
+                    EXISTS (
+                        SELECT 1
+                        FROM reservations res
+                        WHERE res.reservable_id = r.id
+                        AND res.category = 'RESERVATION'
+                        AND res.start_time < TIMESTAMP(DATE(?), TIME(?))
+                        AND res.end_time > TIMESTAMP(DATE(?), TIME(?))
+                    )
+                    `);
+
+                    params.push(day, filters.endTime, day, filters.startTime);
+                }
+
+                where.push(`NOT (${dayConditions.join(' OR ')})`);
+            } else {
+                where.push(`
+                    NOT EXISTS (
+                    SELECT 1
+                    FROM reservations res
+                    WHERE res.reservable_id = r.id
+                        AND res.category = 'RESERVATION'
+                        AND res.start_time < ?
+                        AND res.end_time > ?
+                    )
+                `);
+
+                params.push(filters.endTime, filters.startTime);
+            }
+        }
+
+        const sql = `
+            SELECT
+            r.id,
+            r.name,
+            r.code,
+            r.capacity,
+            f.name AS floor,
+            r.is_blocked,
+
+            CASE
+                WHEN r.is_blocked = 1 THEN 'blocked'
+
+                WHEN EXISTS (
+                SELECT 1
+                FROM reservations res
+                WHERE res.reservable_id = r.id
+                    AND res.category = 'RESERVATION'
+                    AND res.start_time < UTC_TIMESTAMP()
+                    AND res.end_time > UTC_TIMESTAMP()
+                ) THEN 'occupied'
+
+                WHEN EXISTS (
+                SELECT 1
+                FROM reservations res
+                WHERE res.reservable_id = r.id
+                    AND res.category = 'RESERVATION'
+                    AND res.start_time > UTC_TIMESTAMP()
+                    AND res.start_time <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)
+                ) THEN 'soon'
+
+                ELSE 'available'
+            END AS status
+
+            FROM reservables r
+            JOIN floors f ON f.id = r.floor_id
+            WHERE ${where.join(' AND ')}
+            ORDER BY r.name ASC
+        `;
+        const { rows } = await db.query(sql, params);
+
+        return rows;
+    }
+
+    const getReservableById = async (id: number, detail = false): Promise<Reservable | null> => {
         const { rows } = await db.query(
             `SELECT id, name, capacity, floor_id, is_blocked FROM reservables WHERE id = ?`,
             [id],
@@ -113,7 +272,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         return { ...r, is_blocked: Boolean(r.is_blocked) } as Reservable;
     };
 
-    const createReservable = async (data: Omit<Reservable, 'id'>): Promise<Reservable | null> => {
+    const createReservable = async (data: CreateReservable): Promise<Reservable | null> => {
         const { insertId } = await db.execute(
             `INSERT INTO reservables (name, capacity, floor_id, is_blocked) VALUES (?, ?, ?, ?)`,
             [data.name, data.capacity, data.floor_id, data.is_blocked ? 1 : 0],
@@ -143,6 +302,72 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     const deleteReservable = async (id: number): Promise<boolean> => {
         const { affectedCount } = await db.execute(`DELETE FROM reservables WHERE id = ?`, [id]);
         return affectedCount > 0;
+    };
+    
+    const getReservationSummariesBySlot = async (
+        slotId: number,
+        dates?: Date[],
+    ): Promise<ReservationSummary[]> => {
+        const params: unknown[] = [slotId];
+        let dateFilter = '';
+
+        if (dates && dates.length > 0) {
+            const formattedDates = dates.map(d => d.toISOString().split('T')[0]);
+            dateFilter = `AND DATE(r.start_time) IN (${formattedDates.map(() => '?').join(',')})`;
+            params.push(...formattedDates);
+        
+        }
+
+        const { rows } = await db.query(
+            `
+        SELECT
+            r.id,
+            r.reservable_id,
+            r.start_time,
+            r.end_time,
+            r.attendance_status,
+            res.name AS reservable_name,
+            res.floor_id,
+            f.name AS floor_name
+        FROM reservations r
+        JOIN reservables res ON res.id = r.reservable_id
+        JOIN floors f ON f.id = res.floor_id
+        WHERE r.reservable_id = ?
+        ${dateFilter}
+        ORDER BY r.start_time ASC
+        `,
+            params,
+        );
+
+        return rows as ReservationSummary[];
+    };
+    const getReservationDetailsBySlot = async (
+        slotId: number,
+        dates?: Date[],
+    ): Promise<Reservation[]> => {
+        const params: unknown[] = [slotId];
+        let dateFilter = '';
+
+        if (dates && dates.length >= 2) {
+            dateFilter = `
+            AND r.start_time < ?
+            AND r.end_time > ?
+        `;
+            params.push(dates[1], dates[0]);
+        }
+
+        const { rows } = await db.query(
+            `
+        SELECT ${RESERVATION_FIELDS}
+        FROM reservations r
+        WHERE r.reservable_id = ?
+        ${dateFilter}
+        ORDER BY r.start_time ASC
+        `,
+            params,
+        );
+
+        return rows.map((row) => hydrateReservation(row as ReservationRow));
     };
 
     // Reservations
@@ -255,11 +480,11 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
                     allFriendSet.has(p.user_id)
                         ? p
                         : {
-                            ...p,
-                            user_id: null,
-                            attendance_status: null,
-                            ownership_priority: null,
-                        },
+                              ...p,
+                              user_id: null,
+                              attendance_status: null,
+                              ownership_priority: null,
+                          },
                 );
                 return { ...res, reservable, participants };
             }),
@@ -333,12 +558,12 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             const allParticipants: Array<{ userId: string; priority: number; status: string }> = [];
 
             if (creatorIsParticipant) {
-                allParticipants.push({ userId: creatorId, priority: 0, status: "NOT_ARRIVED" });
+                allParticipants.push({ userId: creatorId, priority: 0, status: 'NOT_ARRIVED' });
             }
 
             for (const pid of participantIds) {
                 if (pid === creatorId) continue; // ya fue agregado arriba con priority 0
-                allParticipants.push({ userId: pid, priority, status: "INVITED" });
+                allParticipants.push({ userId: pid, priority, status: 'INVITED' });
                 priority++;
             }
 
@@ -462,10 +687,10 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         reservationId: number,
     ): Promise<
         | {
-            action: 'checked_out' | 'no_show_fallback';
-            reservation: Reservation;
-            participants: Participant[];
-        }
+              action: 'checked_out' | 'no_show_fallback';
+              reservation: Reservation;
+              participants: Participant[];
+          }
         | { action: 'skipped'; reason: string }
     > => {
         const checkoutResult = await db.execute(
@@ -571,10 +796,13 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
     return {
         getAllReservables,
+        getAvailableReservables,
         getReservableById,
         createReservable,
         updateReservable,
         deleteReservable,
+        getReservationDetailsBySlot,
+        getReservationSummariesBySlot,
 
         getReservationById,
         getReservationWithParticipants,
