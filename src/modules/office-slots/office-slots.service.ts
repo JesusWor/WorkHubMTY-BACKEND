@@ -122,14 +122,15 @@ export type OfficeSlotsService = {
     updateReservable: (id: number, data: UpdateReservable) => Promise<Reservable>;
     deleteReservable: (id: number) => Promise<void>;
 
-    // Blocks
-    createBlockBatch: (data: BlockBatch) => Promise<ReservationWithParticipants[]>;
-    cancelBlock: (id: number) => Promise<void>;
     getReservationsForSlot: (
         slotId: number,
         dates?: Date[],
         detail?: boolean,
     ) => Promise<Reservation[] | ReservationSummary[]>;
+
+    // Blocks
+    createBlockBatch: (data: BlockBatch) => Promise<ReservationWithParticipants[]>;
+    cancelBlock: (id: number) => Promise<void>;
 
     // Reservations
     listReservations: (
@@ -609,9 +610,10 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         updateReservable,
         deleteReservable,
 
+        getReservationsForSlot,
+        
         createBlockBatch,
         cancelBlock,
-        getReservationsForSlot,
 
         listReservations,
         getReservationDetail,
