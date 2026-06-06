@@ -5,14 +5,14 @@ import type {
 } from "../../modules/parking-slots/parking-slots.schema.js";
 
 export type ParkingEventMap = {
-    "reservation.created": [reservation: ParkingReservation];
-    "reservation.canceled": [reservation: ParkingReservation];
-    "reservation.attendance_updated": [reservation: ParkingReservation];
-    "reservation.no_show": [reservation: ParkingReservation];
-    
-    "lot.created": [lot: ParkingLot];
-    "lot.updated": [lot: ParkingLot];
-    "lot.deleted": [lotId: number];
+    "parking.reservation.created": [reservation: ParkingReservation];
+    "parking.reservation.canceled": [reservation: ParkingReservation];
+    "parking.reservation.attendance_updated": [reservation: ParkingReservation];
+    "parking.reservation.noshow": [reservation: ParkingReservation];
+
+    "parking.lot.created": [lot: ParkingLot];
+    "parking.lot.updated": [lot: ParkingLot];
+    "parking.lot.deleted": [lotId: number];
 };
 
 export type ParkingEventsEmitter = TypedEventEmitter<ParkingEventMap>;

@@ -11,7 +11,7 @@ export type AppContainer = {
   notificationRouter: Router;
   friendshipRouter: Router;
   officeSlotsRouter: Router;
-  // eventsRouter: Router;
+  eventsRouter: Router;
   parkingSlotsRouter: Router;
   achievementsRouter: Router;
   reportsRouter: Router;
@@ -63,6 +63,7 @@ export function createApp(container: AppContainer) {
 
   router.use('/office', container.officeSlotsRouter);
   router.use('/parking', container.parkingSlotsRouter);
+  router.use('/events', container.eventsRouter);
   router.use('/reports', container.reportsRouter);
   router.use('/teams', container.teamsRouter);
 

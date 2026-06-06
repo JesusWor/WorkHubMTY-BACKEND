@@ -1,8 +1,15 @@
 import { createDb } from "../infra/db/db.js";
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
-import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from "../modules/user/index.js";
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
+import {
+    makeUserRepo,
+    makeUserService,
+    makeUserStatusService,
+    makeUserController,
+    makeUserRouter,
+    makeUserStatsRepo,
+    makeUserStatsService,
+} from "../modules/user/index.js"; import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import {
@@ -15,6 +22,12 @@ import {
 import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
 import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
 
+import {
+    makeEventsRepo,
+    makeEventsService,
+    makeEventsController,
+    makeEventsRouter,
+} from '../modules/guest-events/index.js';
 import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
 
 import { officeEvents, parkingEvents, teamEvents, userEvents } from "../infra/events/index.js";
@@ -45,7 +58,11 @@ export function buildContainer() {
     initAchievementsListeners(achievementsService);
 
     const userStatusService = makeUserStatusService();
-    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
+    const userStatsRepo = makeUserStatsRepo(db);
+    const userStatsService = makeUserStatsService(userStatsRepo);
+    userStatsService.initListeners();
+    userStatsService.initScheduler();
+    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService, userStatsService);
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController);
 
@@ -89,7 +106,6 @@ export function buildContainer() {
     const officeWorker = createOfficeWorker({
         markNoShowForReservation: (id) => officeSlotsRepo.markNoShowForReservation(id),
         markCheckoutForReservation: (id) => officeSlotsRepo.markCheckoutForReservation(id),
-        unblockReservable: (reservableId) => officeSlotsRepo.unblockReservable(reservableId),
         getReservableById: (id) => officeSlotsRepo.getReservableById(id),
     });
     const parkingWorker = createParkingWorker({
@@ -101,6 +117,11 @@ export function buildContainer() {
     const reportsSlotsService = makeReportsService(reportsRepo);
     const reportsController = makeReportsController(reportsSlotsService);
     const reportsRouter = makeReportsRouter(reportsController);
+
+    const eventsRepo = makeEventsRepo(db);
+    const eventsService = makeEventsService(eventsRepo, userRepo);
+    const eventsController = makeEventsController(eventsService);
+    const eventsRouter = makeEventsRouter(eventsController);
 
     const teamsRepo = makeTeamsRepo(db);
     const teamsService = makeTeamsService(teamsRepo, userStatusService);
@@ -125,6 +146,7 @@ export function buildContainer() {
         parkingSlotsRepo,
         parkingWorker,
         reportsRouter,
+        eventsRouter,
         teamsService,
     };
 };

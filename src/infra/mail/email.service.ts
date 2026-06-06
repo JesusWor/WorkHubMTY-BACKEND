@@ -1,26 +1,20 @@
-import nodemailer from "nodemailer";
-import { env } from "../../config/env.js";
-import { SendEmailDTO } from "./email.types.js";
+import { Resend } from 'resend';
+import { env } from '../../config/env.js';
+import { SendEmailDTO } from './email.types.js';
+
+const resend = new Resend(env.mail.resendApiKey);
 
 export class EmailService {
-
-  private static transporter = nodemailer.createTransport({
-    host: env.mail.host,
-    port: env.mail.port,
-    auth: {
-      user: env.mail.user,
-      pass: env.mail.pass
-    }
-  });
-
-  static async sendEmail(data: SendEmailDTO) {
-
-    await this.transporter.sendMail({
-      from: `"WorkHub" <${env.mail.user}>`,
+  static async sendEmail(data: SendEmailDTO): Promise<void> {
+    const { error } = await resend.emails.send({
+      from: env.mail.fromAddress,
       to: data.to,
       subject: data.subject,
-      html: data.html
+      html: data.html,
     });
 
+    if (error) {
+      throw new Error(`Resend error: ${error.message}`);
+    }
   }
 }

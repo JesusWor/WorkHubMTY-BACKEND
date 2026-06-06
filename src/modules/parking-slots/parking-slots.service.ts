@@ -25,7 +25,7 @@ import { Queue } from "bullmq";
 import { NoShowJobData, CheckoutJobData } from "../../infra/queue/parking-queue.js";
 import { ParkingEventsEmitter } from "../../infra/events/parking-events.emitter.js";
 
-const CHECKIN_TOLERANCE_MINUTES = 30;
+export const CHECKIN_TOLERANCE_MINUTES = 30;
 
 const ATTENDANCE_TRANSITIONS: Record<AttendanceStatus, AttendanceStatus[]> = {
     NOT_ARRIVED: ["CHECKED_IN", "NO_SHOW"],
@@ -173,21 +173,21 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
     const createLot = async (data: CreateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.createLot(data.name, data.capacity, data.priority);
         if (!lot) throw new ConflictError("No fue posible crear el cajón");
-        emitter.emit("lot.created", lot);
+        emitter.emit("parking.lot.created", lot);
         return lot;
     };
 
     const updateLot = async (id: number, data: UpdateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.updateLot(id, data);
         if (!lot) throw new NotFoundError(`El cajón ${id} no existe`);
-        emitter.emit("lot.updated", lot);
+        emitter.emit("parking.lot.updated", lot);
         return lot;
     };
 
     const deleteLot = async (id: number): Promise<void> => {
         const deleted = await repo.deleteLot(id);
         if (!deleted) throw new NotFoundError(`El cajón ${id} no existe`);
-        emitter.emit("lot.deleted", id);
+        emitter.emit("parking.lot.deleted", id);
     };
 
     // ── Reservations ──────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         const lots = await repo.getAllLots();
         const projection = await computeProjection(repo, reservation, lots);
 
-        emitter.emit("reservation.created", reservation);
+        emitter.emit("parking.reservation.created", reservation);
 
         return { reservation, projection };
     };
@@ -353,7 +353,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             await queue.remove(checkoutJobId(id));
         }
 
-        emitter.emit("reservation.attendance_updated", updated);
+        emitter.emit("parking.reservation.attendance_updated", updated);
         return updated;
     };
 
@@ -388,7 +388,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         await queue.remove(noShowJobId(id));
         await queue.remove(checkoutJobId(id));
 
-        emitter.emit("reservation.canceled", updated);
+        emitter.emit("parking.reservation.canceled", updated);
         return updated;
     };
 

@@ -56,6 +56,20 @@ export function makeOfficeSlotsRouter(controller: OfficeSlotsController): Router
         asyncHandler(controller.deleteReservable),
     );
 
+    // Blocks
+    router.post(
+        '/block',
+        authenticate,
+        authorize({ allow: SUPERVISOR_ROLES }),
+        asyncHandler(controller.createBlockBatch),
+    );
+    router.delete(
+        '/block/:id',
+        authenticate,
+        authorize({ allow: SUPERVISOR_ROLES }),
+        asyncHandler(controller.cancelBlock),
+    );
+
     // Reservations
     router.post(
         '/reservations',

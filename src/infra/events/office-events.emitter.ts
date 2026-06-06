@@ -12,18 +12,18 @@ export type OfficeReservationPayload = {
 };
 
 export type OfficeEventMap = {
-    "reservation.created": [payload: OfficeReservationPayload];
-    "reservation.canceled": [payload: OfficeReservationPayload];
-    "reservation.checkedin": [payload: OfficeReservationPayload];
-    "reservation.attendance_updated": [payload: OfficeReservationPayload];
-    "reservation.noshow": [payload: OfficeReservationPayload];
-    "reservation.checkedout": [payload: OfficeReservationPayload];
+    "office.reservation.created": [payload: OfficeReservationPayload];
+    "office.reservation.canceled": [payload: OfficeReservationPayload];
+    "office.reservation.checkedin": [payload: OfficeReservationPayload];
+    "office.reservation.attendance_updated": [payload: OfficeReservationPayload];
+    "office.reservation.noshow": [payload: OfficeReservationPayload];
+    "office.reservation.checkedout": [payload: OfficeReservationPayload];
 
-    "participant.updated": [payload: OfficeReservationPayload];
+    "office.participant.updated": [payload: OfficeReservationPayload];
 
-    "slot.created": [slot: Reservable];
-    "slot.updated": [slot: Reservable];
-    "slot.deleted": [slotId: number];
+    "office.slot.created": [slot: Reservable];
+    "office.slot.updated": [slot: Reservable];
+    "office.slot.deleted": [slotId: number];
 };
 
 export type OfficeEventsEmitter = TypedEventEmitter<OfficeEventMap>;

@@ -9,6 +9,7 @@ import type {
     ListUsersQuery,
     UserRelationExclude,
 } from "./user.schema.js";
+import type { UserStatsService } from "./user-stats.service.js";
 import type { FriendshipService } from "../friendship/friendship.service.js";
 import type { AchievementsService } from "../achievements/achievements.service.js";
 import type { UserStatusService } from "./user-status.service.js";
@@ -85,6 +86,7 @@ export function makeUserService(
     friendshipService: FriendshipService,
     achievementService: AchievementsService,
     userStatusService: UserStatusService,
+    userStatsService: UserStatsService,
 ): UserService {
     const getAll = async (): Promise<User[]> => {
         const users = await repo.getAll();
@@ -132,19 +134,22 @@ export function makeUserService(
             throw new NotFoundError("Usuario no encontrado");
         }
 
-        const friends = await getUserFriends(requestedEId);
-        const achievements = await achievementService.getCompletedByUser(requestedEId) || [];
-        const status = await userStatusService.getStatus(requestedEId);
+        const [friends, achievements, status, userStats] = await Promise.all([
+            getUserFriends(requestedEId),
+            achievementService.getCompletedByUser(requestedEId),
+            userStatusService.getStatus(requestedEId),
+            userStatsService.getByUserId(requestedEId),
+        ]);
 
         return {
             ...user,
             status,
-            stats:{
-                streak: 20,
+            stats: {
+                streak: userStats?.streak ?? 0,
                 friendCount: friends.length,
-                levelsPassed: achievements.length,
-                hoursInOffice: 100, // This would be calculated or fetched from somewhere
-                points:2300
+                levelsPassed: (achievements ?? []).length,
+                hoursInOffice: userStats?.total_work_hours ?? 0,
+                ap: userStats?.ap ?? 0,
             }
         };
     };

@@ -5,6 +5,7 @@ import {
     CreateReservableSchema,
     UpdateReservableSchema,
     CreateReservationBatchSchema,
+    BlockBatchSchema,
     PatchReservationAttendanceSchema,
     PatchParticipantAttendanceSchema,
     ListReservationsQuerySchema,
@@ -26,6 +27,10 @@ export type OfficeSlotsController = {
     updateReservable: (req: Request, res: Response) => Promise<void>;
     deleteReservable: (req: Request, res: Response) => Promise<void>;
     getReservationsForSlot: (req: Request, res: Response) => Promise<void>;
+
+    // Blocks
+    createBlockBatch: (req: Request, res: Response) => Promise<void>;
+    cancelBlock: (req: Request, res: Response) => Promise<void>;
 
     // Reservations
     listReservations: (req: Request, res: Response) => Promise<void>;
@@ -265,6 +270,28 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         GlobalResponse.okWithData(res, result);
     };
 
+    // Blocks
+
+    const createBlockBatch = async (req: Request, res: Response): Promise<void> => {
+        const parsed = BlockBatchSchema.safeParse(req.body);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const created = await service.createBlockBatch(parsed.data);
+        GlobalResponse.created(res, created);
+    };
+
+    const cancelBlock = async (req: Request, res: Response): Promise<void> => {
+        const parsed = ReservationIdParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        await service.cancelBlock(parsed.data.id);
+        GlobalResponse.ok(res);
+    };
+
     return {
         getAllReservables,
         getAvailableReservables,
@@ -273,6 +300,9 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         updateReservable,
         deleteReservable,
         getReservationsForSlot,
+
+        createBlockBatch,
+        cancelBlock,
 
         listReservations,
         getReservationDetail,
