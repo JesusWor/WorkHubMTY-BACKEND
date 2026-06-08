@@ -15,11 +15,20 @@ import {
 
 const MAX_TOOL_ITERATIONS = 12;
 
-function buildSystemPrompt(userEId: string, userRole: string): string {
+function buildSystemPrompt(userEId: string, userRole: string, timezone: string): string {
     const now = new Date().toISOString();
+    const localNow = new Date().toLocaleString('es-MX', { timeZone: timezone, hour12: false });
     return `Eres un asistente virtual de WorkHub, una app de gestión de espacios de oficina y estacionamientos.
-Fecha y hora actual: ${now}
+Fecha y hora actual (UTC): ${now}
+Fecha y hora local del usuario: ${localNow} (zona horaria: ${timezone})
 Usuario autenticado: eId="${userEId}", rol="${userRole}"
+
+ZONA HORARIA (CRÍTICO):
+- El usuario opera en la zona horaria "${timezone}".
+- Cuando el usuario diga "hoy a las 9am", "mañana a las 3pm", etc., interpreta esas horas en su zona horaria local.
+- Convierte SIEMPRE a UTC (ISO 8601) antes de pasarlas a cualquier herramienta.
+- Ejemplo: si el usuario dice "hoy a las 9am" y su zona es "America/Monterrey" (UTC-6), el ISO es "...T15:00:00.000Z".
+- Usa la fecha local del usuario como referencia para "hoy", "mañana", "esta semana".
 
 CAPACIDADES:
 - Buscar y reservar espacios de oficina (cubículos/salas)
@@ -40,7 +49,7 @@ ESTRATEGIA DE BÚSQUEDA (CRÍTICO):
 - NUNCA informes al usuario que "no hay espacios" tras un solo intento fallido.
 
 REGLAS DE RESERVA DE OFICINA:
-- "timestamps" → array de { start_time: "ISO8601", end_time: "ISO8601" }
+- "timestamps" → array de { start_time: "ISO8601 UTC", end_time: "ISO8601 UTC" }
 - "participants" → array de eIds. Para incluir al usuario actual usa "${userEId}".
 - Si desconoces los participantes → llama openParticipantPicker.
 - Si hay múltiples espacios disponibles → llama showSpaceCarousel con los resultados.
@@ -55,7 +64,7 @@ REGLAS DE ESTACIONAMIENTO:
 PROHIBICIONES:
 - Nunca inventes IDs, nombres de espacios ni cajones.
 - Nunca asumas que un horario está disponible sin consultarlo.
-- Todas las fechas: strings ISO 8601 (ej: "2025-06-10T15:00:00.000Z").`;
+- Todas las fechas a las herramientas: strings ISO 8601 UTC (ej: "2025-06-10T15:00:00.000Z").`;
 }
 
 interface TurnResult {
@@ -199,6 +208,42 @@ function buildWidgetResultsMessage(results: SingleWidgetResult[]): string {
     return `[El usuario completó las siguientes interacciones con los widgets del frontend]\n${parts.join('\n')}\n\nContinúa con la tarea usando estos datos.`;
 }
 
+const GEMINI_RETRY_ATTEMPTS = 3;
+const GEMINI_RETRY_BASE_DELAY_MS = 3_000;
+
+function isGemini503(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    return err.message.includes('503') || err.message.toLowerCase().includes('service unavailable');
+}
+
+async function sendMessageWithRetry(
+    chat: ReturnType<ReturnType<typeof getGeminiModel>['startChat']>,
+    input: string | Part[],
+    sse: SSEWriter,
+): Promise<AsyncIterable<any>> {
+    for (let attempt = 1; attempt <= GEMINI_RETRY_ATTEMPTS; attempt++) {
+        try {
+            const result = await chat.sendMessageStream(input as any);
+            return result.stream;
+        } catch (err) {
+            if (isGemini503(err) && attempt < GEMINI_RETRY_ATTEMPTS) {
+                const delay = GEMINI_RETRY_BASE_DELAY_MS * attempt;
+                sse.retrying(
+                    attempt,
+                    attempt === 1
+                        ? 'La respuesta puede demorar un poco, por favor espera...'
+                        : `Reintentando (intento ${attempt + 1})...`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+            }
+            throw err;
+        }
+    }
+    // Unreachable, but TypeScript needs it
+    throw new Error('sendMessageWithRetry: exceeded max attempts');
+}
+
 export async function runChatStream(
     messages: HistoryMessage[],
     newMessage: string,
@@ -209,7 +254,7 @@ export async function runChatStream(
 ): Promise<void> {
     const model = getGeminiModel();
     const geminiTools = buildFunctionDeclarations(toolRegistry.all());
-    const systemInstruction = buildSystemPrompt(ctx.user.eId, ctx.user.role);
+    const systemInstruction = buildSystemPrompt(ctx.user.eId, ctx.user.role, ctx.timezone);
 
     const history: Content[] = buildGeminiHistory(messages);
 
@@ -233,8 +278,8 @@ export async function runChatStream(
     while (iterations < MAX_TOOL_ITERATIONS) {
         iterations++;
 
-        const resultStream = await chat.sendMessageStream(nextInput as any);
-        const { text, functionCalls } = await streamTurn(resultStream.stream, sse);
+        const stream = await sendMessageWithRetry(chat, nextInput, sse);
+        const { text, functionCalls } = await streamTurn(stream, sse);
 
         if (functionCalls.length === 0) {
             sse.done(text);
@@ -253,8 +298,8 @@ export async function runChatStream(
         }
 
         if (allPendingWidgets.size > 0) {
-            const wrapStream = await chat.sendMessageStream(parts as any);
-            const { text: wrapText } = await streamTurn(wrapStream.stream, sse);
+            const wrapStream = await sendMessageWithRetry(chat, parts, sse);
+            const { text: wrapText } = await streamTurn(wrapStream, sse);
             sse.done(wrapText, [...allPendingWidgets.keys()]);
             return;
         }

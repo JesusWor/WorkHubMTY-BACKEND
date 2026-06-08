@@ -6,6 +6,7 @@ import {
     ToolStartEventData,
     ToolDoneEventData,
     ClientToolEventData,
+    RetryingEventData,
     DoneEventData,
     ErrorEventData,
 } from './chat.types.js';
@@ -43,6 +44,11 @@ export class SSEWriter {
     /** Emit a CLIENT tool event with a stable widgetId */
     clientTool(widgetId: string, name: string, args: Record<string, unknown>): void {
         this.send<ClientToolEventData>('client_tool', { widgetId, name, args });
+    }
+
+    /** Inform the frontend that a transient Gemini error occurred and a retry is in progress */
+    retrying(attempt: number, message: string): void {
+        this.send<RetryingEventData>('retrying', { attempt, message });
     }
 
     done(message: string, pendingWidgets?: string[]): void {

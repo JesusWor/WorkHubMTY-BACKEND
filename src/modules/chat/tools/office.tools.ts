@@ -110,7 +110,7 @@ toolRegistry.register({
     schema: z.object({}),
     handler: async (_args, _ctx, services, _trace) => {
         const all = await services.officeSlots.getAllReservables();
-        return all.sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }));
+        return all.sort((a, b) => a.code.localeCompare(b.code, 'es', { numeric: true }));
     },
 });
 

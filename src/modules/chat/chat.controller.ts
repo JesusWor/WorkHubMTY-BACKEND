@@ -22,6 +22,8 @@ const ChatRequestSchema = z.object({
     message: z.string().default(''),
     /** Array of resolved widget results (replaces singular tool_result) */
     widget_results: z.array(SingleWidgetResultSchema).optional(),
+    /** IANA timezone string from the client (e.g. "America/Monterrey") */
+    timezone: z.string().default('UTC'),
 });
 
 export function makeChatController(services: ChatServices) {
@@ -38,14 +40,14 @@ export function makeChatController(services: ChatServices) {
                 return;
             }
 
-            const { messages, message, widget_results } = parsed.data;
+            const { messages, message, widget_results, timezone } = parsed.data;
 
             if (!message.trim() && !widget_results?.length) {
                 GlobalResponse.badRequest(res, 'Se requiere "message" o "widget_results"');
                 return;
             }
 
-            const ctx = { user: req.user };
+            const ctx = { user: req.user, timezone };
             const sse = initSSE(res);
 
             try {

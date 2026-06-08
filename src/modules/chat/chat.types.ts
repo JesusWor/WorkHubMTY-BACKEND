@@ -6,6 +6,9 @@ import { UserService } from '../user/user.service.js';
 
 export interface ChatContext {
     user: JwtPayload;
+    /** IANA timezone string sent by the client (e.g. "America/Monterrey").
+     *  Used to convert user-facing local times to UTC before hitting the DB. */
+    timezone: string;
 }
 
 export interface ChatServices {
@@ -20,6 +23,7 @@ export type SSEEventType =
     | 'tool_start'
     | 'tool_done'
     | 'client_tool'   // one event per client tool — frontend collects all before responding
+    | 'retrying'      // transient: Gemini 503 — backend is retrying, frontend shows a soft notice
     | 'done'
     | 'error';
 
@@ -37,6 +41,10 @@ export interface DoneEventData {
     message: string;
     /** When CLIENT tools are pending, lists their widgetIds so frontend knows what to collect */
     pending_widgets?: string[];
+}
+export interface RetryingEventData {
+    attempt: number;    // 1-based retry number
+    message: string;    // human-readable notice for the chat UI
 }
 export interface ErrorEventData { message: string }
 

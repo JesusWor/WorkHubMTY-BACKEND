@@ -66,7 +66,8 @@ export const PARTICIPANT_USER_TRANSITIONS: Record<string, ParticipantAttendanceS
 
 export const ReservableSchema = z.object({
     id: z.number().int(),
-    name: z.string().min(1).max(32),
+    code: z.string().min(1).max(32),
+    name: z.string().max(50).nullable(),
     capacity: z.number().int().min(1),
     floor: z.string(),
     status:z.enum(['available', 'occupied', 'soon', 'blocked']),
