@@ -1,4 +1,5 @@
 import { createDb } from "../infra/db/db.js";
+import { makeChatController, makeChatRouter } from "../modules/chat/index.js";
 import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
 import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
 import {
@@ -128,6 +129,13 @@ export function buildContainer() {
     const teamsController = makeTeamsController(teamsService);
     const teamsRouter = makeTeamsRouter(teamsController);
 
+    const chatController = makeChatController({
+        officeSlots: officeSlotsService,
+        parkingSlots: parkingSlotsService,
+        user: userService,
+    });
+    const chatRouter = makeChatRouter(chatController);
+
     return {
         roleRouter,
         userRouter,
@@ -148,5 +156,6 @@ export function buildContainer() {
         reportsRouter,
         eventsRouter,
         teamsService,
+        chatRouter,
     };
 };

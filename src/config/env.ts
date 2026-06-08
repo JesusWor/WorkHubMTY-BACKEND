@@ -69,4 +69,8 @@ export const env = {
         resendApiKey: requireString('RESEND_API_KEY'),
         fromAddress: requireString('RESEND_FROM_ADDRESS'),
     },
+    gemini: {
+        apiKey: requireString('GEMINI_API_KEY'),
+        model: requireString('GEMINI_MODEL'),
+    },
 };
