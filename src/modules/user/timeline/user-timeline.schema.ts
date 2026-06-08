@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ReservationCategorySchema, ReservationCategory } from "../../office-slots/office-slots.schema.js";
+import { ReservationCategorySchema, type ReservationCategory } from "../../office-slots/office-slots.schema.js";
 
 function normalizeCsvList(value: unknown): string[] {
     if (Array.isArray(value)) return value.flatMap((item) => normalizeCsvList(item));
