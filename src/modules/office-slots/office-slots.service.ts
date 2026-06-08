@@ -19,6 +19,7 @@ import {
     PARTICIPANT_USER_TRANSITIONS,
     AvailableReservablesQuery,
     ReservationSummary,
+    GetReservationsForSlotFilters,
 } from './office-slots.schema.js';
 import {
     BadRequestError,
@@ -124,7 +125,7 @@ export type OfficeSlotsService = {
 
     getReservationsForSlot: (
         slotId: number,
-        dates?: Date[],
+        filters: GetReservationsForSlotFilters,
         detail?: boolean,
     ) => Promise<Reservation[] | ReservationSummary[]>;
 
@@ -242,17 +243,16 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!deleted) throw new NotFoundError(`El slot ${id} no existe`);
         emitter.emit('office.slot.deleted', id);
     };
-
     const getReservationsForSlot = async (
         slotId: number,
-        dates?: Date[],
+        filters: GetReservationsForSlotFilters,
         detail = false,
-    ): Promise<Reservation[] | ReservationSummary[]> => {
+    ) => {
         if (detail) {
-            return repo.getReservationDetailsBySlot(slotId, dates);
+            return repo.getReservationDetailsBySlot(slotId, filters);
         }
 
-        return repo.getReservationSummariesBySlot(slotId, dates);
+        return repo.getReservationSummariesBySlot(slotId, filters);
     };
 
     // Reservations
@@ -353,7 +353,8 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
 
         // Los bloqueos pueden ser cancelados por cualquier supervisor
         if ((res.category as string) === 'BLOCKED') {
-            if (!isSupervisor) throw new ForbiddenError('Solo un supervisor puede cancelar un bloqueo');
+            if (!isSupervisor)
+                throw new ForbiddenError('Solo un supervisor puede cancelar un bloqueo');
         } else if (!isAdmin) {
             // El "owner activo" es el participante con menor ownership_priority
             const activeOwner = (res.participants as Participant[])
@@ -581,7 +582,10 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             [],
         );
 
-        if (!created.length) throw new ConflictError('No fue posible crear ningún bloqueo (todos los timestamps empalman con reservas existentes)');
+        if (!created.length)
+            throw new ConflictError(
+                'No fue posible crear ningún bloqueo (todos los timestamps empalman con reservas existentes)',
+            );
 
         return created;
     };
@@ -589,8 +593,10 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     const cancelBlock = async (id: number): Promise<void> => {
         const res = await repo.getReservationWithParticipants(id);
         if (!res) throw new NotFoundError(`El bloqueo ${id} no existe`);
-        if ((res.category as string) !== 'BLOCKED') throw new BadRequestError(`La reservación ${id} no es un bloqueo`);
-        if (res.attendance_status === 'CANCELED') throw new ConflictError('El bloqueo ya está cancelado');
+        if ((res.category as string) !== 'BLOCKED')
+            throw new BadRequestError(`La reservación ${id} no es un bloqueo`);
+        if (res.attendance_status === 'CANCELED')
+            throw new ConflictError('El bloqueo ya está cancelado');
 
         const updated = await repo.cancelReservation(id);
         if (!updated) throw new NotFoundError(`El bloqueo ${id} no existe`);
@@ -611,7 +617,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         deleteReservable,
 
         getReservationsForSlot,
-        
+
         createBlockBatch,
         cancelBlock,
 

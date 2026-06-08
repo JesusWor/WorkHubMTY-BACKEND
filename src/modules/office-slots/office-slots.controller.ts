@@ -73,7 +73,10 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         }
         const parsedQuery = ReservationDetailQuerySchema.safeParse(req.query);
 
-        const slot = await service.getReservableById(parsed.data.id, parsedQuery.data ? parsedQuery.data.detail : undefined);
+        const slot = await service.getReservableById(
+            parsed.data.id,
+            parsedQuery.data ? parsedQuery.data.detail : undefined,
+        );
         GlobalResponse.okWithData(res, slot);
     };
 
@@ -135,13 +138,16 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
 
         const reservations = await service.getReservationsForSlot(
             parsedParams.data.id,
-            parsedBody.data.dates,
+            {
+                dates: parsedBody.data.dates,
+                startTime: parsedBody.data.start_time,
+                endTime: parsedBody.data.end_time,
+            },
             parsedQuery.data.detail,
         );
 
         GlobalResponse.okWithData(res, reservations);
     };
-
     // Reservations
 
     const listReservations = async (req: Request, res: Response): Promise<void> => {
