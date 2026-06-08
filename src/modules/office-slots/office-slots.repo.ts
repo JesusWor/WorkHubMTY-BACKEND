@@ -17,7 +17,20 @@ import {
 } from './office-slots.schema.js';
 
 type ReservationRow = Omit<Reservation, 'lifecycle_status' | 'reservable' | 'participants'>;
+
 type ParticipantRow = Participant;
+
+const RESERVATION_FIELDS = `
+  r.id,
+  r.reservable_id,
+  r.category,
+  r.start_time,
+  r.end_time,
+  r.description,
+  r.attendance_status,
+  r.created_at,
+  r.updated_at
+`;
 
 function hydrateReservation(row: ReservationRow): Reservation {
     return {
@@ -39,10 +52,13 @@ export type OfficeSlotsRepo = {
     deleteReservable: (id: number) => Promise<boolean>;
     getReservationSummariesBySlot: (
         slotId: number,
-        dates?: Date[],
+        filters?: GetReservationsForSlotFilters,
     ) => Promise<ReservationSummary[]>;
 
-    getReservationDetailsBySlot: (slotId: number, dates?: Date[]) => Promise<Reservation[]>;
+    getReservationDetailsBySlot: (
+        slotId: number,
+        filters?: GetReservationsForSlotFilters,
+    ) => Promise<Reservation[]>;
     // Reservations
     getReservationById: (id: number) => Promise<Reservation | null>;
     getReservationWithParticipants: (id: number) => Promise<ReservationWithParticipants | null>;
@@ -100,7 +116,42 @@ export type OfficeSlotsRepo = {
     ) => Promise<Array<Pick<Reservation, 'id' | 'start_time'>>>;
     getPendingCheckoutReservations: () => Promise<Array<Pick<Reservation, 'id' | 'end_time'>>>;
 };
+type GetReservationsForSlotFilters = {
+    dates?: string[];
+    startTime?: string;
+    endTime?: string;
+};
 
+type SqlFilter = {
+    sql: string;
+    params: unknown[];
+};
+
+function buildReservationDateFilter(filters?: GetReservationsForSlotFilters): SqlFilter {
+    const uniqueDates = filters?.dates ? Array.from(new Set(filters.dates)).filter(Boolean) : [];
+
+    if (uniqueDates.length > 0) {
+        return {
+            sql: `AND DATE(r.start_time) IN (${uniqueDates.map(() => '?').join(',')})`,
+            params: uniqueDates,
+        };
+    }
+
+    if (filters?.startTime && filters.endTime) {
+        return {
+            sql: `
+        AND r.start_time < ?
+        AND r.end_time > ?
+      `,
+            params: [filters.endTime, filters.startTime],
+        };
+    }
+
+    return {
+        sql: '',
+        params: [],
+    };
+}
 export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     // Reservables
 
@@ -303,39 +354,33 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const { affectedCount } = await db.execute(`DELETE FROM reservables WHERE id = ?`, [id]);
         return affectedCount > 0;
     };
-    
     const getReservationSummariesBySlot = async (
         slotId: number,
-        dates?: Date[],
+        filters?: GetReservationsForSlotFilters,
     ): Promise<ReservationSummary[]> => {
-        const params: unknown[] = [slotId];
-        let dateFilter = '';
+        const dateFilter = buildReservationDateFilter(filters);
 
-        if (dates && dates.length > 0) {
-            const formattedDates = dates.map(d => d.toISOString().split('T')[0]);
-            dateFilter = `AND DATE(r.start_time) IN (${formattedDates.map(() => '?').join(',')})`;
-            params.push(...formattedDates);
-        
-        }
+        const params: unknown[] = [slotId, ...dateFilter.params];
 
         const { rows } = await db.query(
             `
-        SELECT
-            r.id,
-            r.reservable_id,
-            r.start_time,
-            r.end_time,
-            r.attendance_status,
-            res.name AS reservable_name,
-            res.floor_id,
-            f.name AS floor_name
-        FROM reservations r
-        JOIN reservables res ON res.id = r.reservable_id
-        JOIN floors f ON f.id = res.floor_id
-        WHERE r.reservable_id = ?
-        ${dateFilter}
-        ORDER BY r.start_time ASC
-        `,
+            SELECT
+                r.id,
+                r.reservable_id,
+                r.start_time,
+                r.end_time,
+                r.attendance_status,
+                res.name AS reservable_name,
+                res.floor_id,
+                f.name AS floor_name
+            FROM reservations r
+            JOIN reservables res ON res.id = r.reservable_id
+            JOIN floors f ON f.id = res.floor_id
+            WHERE r.reservable_id = ?
+                AND r.attendance_status <> 'CANCELED'
+            ${dateFilter.sql}
+            ORDER BY r.start_time ASC
+            `,
             params,
         );
 
@@ -343,39 +388,26 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     };
     const getReservationDetailsBySlot = async (
         slotId: number,
-        dates?: Date[],
+        filters?: GetReservationsForSlotFilters,
     ): Promise<Reservation[]> => {
-        const params: unknown[] = [slotId];
-        let dateFilter = '';
+        const dateFilter = buildReservationDateFilter(filters);
 
-        if (dates && dates.length >= 2) {
-            dateFilter = `
-            AND r.start_time < ?
-            AND r.end_time > ?
-        `;
-            params.push(dates[1], dates[0]);
-        }
+        const params: unknown[] = [slotId, ...dateFilter.params];
 
         const { rows } = await db.query(
             `
-        SELECT ${RESERVATION_FIELDS}
-        FROM reservations r
-        WHERE r.reservable_id = ?
-        ${dateFilter}
-        ORDER BY r.start_time ASC
-        `,
+            SELECT ${RESERVATION_FIELDS}
+            FROM reservations r
+            WHERE r.reservable_id = ?
+            AND r.attendance_status <> 'CANCELED'
+            ${dateFilter.sql}
+            ORDER BY r.start_time ASC
+            `,
             params,
         );
 
-        return rows.map((row) => hydrateReservation(row as ReservationRow));
+        return (rows as ReservationRow[]).map(hydrateReservation);
     };
-
-    // Reservations
-
-    const RESERVATION_FIELDS = `
-        r.id, r.reservable_id, r.category, r.start_time, r.end_time,
-        r.description, r.attendance_status, r.created_at, r.updated_at
-    `;
 
     const getReservationById = async (id: number): Promise<Reservation | null> => {
         const { rows } = await db.query(

@@ -231,16 +231,59 @@ export const ListReservationsPageSchema = z.object({
 export type ListReservationsPage = z.infer<typeof ListReservationsPageSchema>;
 
 export const ReservationIdParamSchema = z.object({
-    id: z.coerce.number().int().positive(),
+  id: z.coerce.number().int().positive(),
 });
 
 export const ReservationDetailQuerySchema = z.object({
-    detail: z.coerce.boolean().optional().default(false),
+  detail: z.coerce.boolean().optional().default(false),
 });
 
-export const ReservationIdBodySchema = z.object({
-    dates: z.array(z.coerce.date()).optional(),
-});
+export const ReservationIdBodySchema = z
+  .object({
+    dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
+
+    start_time: z.iso.datetime().optional(),
+    end_time: z.iso.datetime().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasDates = Boolean(data.dates && data.dates.length > 0);
+    const hasRange = Boolean(data.start_time && data.end_time);
+
+    if (!hasDates && !hasRange) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Debes enviar dates[] o start_time/end_time.",
+        path: ["dates"],
+      });
+    }
+
+    if (hasDates && hasRange) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Envía solo dates[] o solo start_time/end_time, no ambos.",
+        path: ["dates"],
+      });
+    }
+
+    if (data.start_time && data.end_time) {
+      const start = new Date(data.start_time);
+      const end = new Date(data.end_time);
+
+      if (start >= end) {
+        ctx.addIssue({
+          code: "custom",
+          message: "start_time debe ser menor que end_time.",
+          path: ["start_time"],
+        });
+      }
+    }
+  });
+
+export type GetReservationsForSlotFilters = {
+  dates?: string[];
+  startTime?: string;
+  endTime?: string;
+};
 
 export const AvailableReservablesQuerySchema = z.object({
     floorId: z.coerce.number().int().optional(),
@@ -268,3 +311,4 @@ export const ParticipantIdParamSchema = z.object({
 export const UserIdParamSchema = z.object({
     userId: z.string().min(1),
 });
+

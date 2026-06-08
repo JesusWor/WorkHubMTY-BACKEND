@@ -20,6 +20,8 @@ export const ReportsBucketSchema = z.object({
     total: z.number().int(),
     attended: z.number().int(),
     missed: z.number().int(),
+    pending: z.number().int(),
+    canceled: z.number().int(),
     attendance_rate: z.number(),
 });
 
@@ -28,12 +30,16 @@ export const ReservationBucketSchema = z.object({
     total: z.number().int(),
     checked_in: z.number().int(),
     not_checked_in: z.number().int(),
+    pending: z.number().int(),
+    canceled: z.number().int(),
 });
 
 export const AttendanceSummarySchema = z.object({
     total: z.number().int(),
     attended: z.number().int(),
     missed: z.number().int(),
+    pending: z.number().int(),
+    canceled: z.number().int(),
     attendance_rate: z.number(),
     buckets: z.array(ReportsBucketSchema),
 });
@@ -42,6 +48,8 @@ export const ReservationSummarySchema = z.object({
     total: z.number().int(),
     checked_in: z.number().int(),
     not_checked_in: z.number().int(),
+    pending: z.number().int(),
+    canceled: z.number().int(),
     buckets: z.array(ReservationBucketSchema),
 });
 
