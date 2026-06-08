@@ -156,6 +156,7 @@ export const CreateReservationBatchSchema = z
         description: z.string().max(255).default(''),
         timestamps: z.array(TimestampPairSchema).min(1, 'Se requiere al menos 1 timestamp'),
         participants: z.array(z.string()).default([]),
+        teamIds: z.array(z.string()).default([])
     })
     .refine(
         (d) => {
