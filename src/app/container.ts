@@ -9,7 +9,9 @@ import {
     makeUserRouter,
     makeUserStatsRepo,
     makeUserStatsService,
-} from "../modules/user/index.js"; import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
+} from "../modules/user/index.js";
+import { makeUserTimelineService, makeUserTimelineController } from "../modules/user/index.js";
+import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
 import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
 import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
 import {
@@ -56,15 +58,6 @@ export function buildContainer() {
     const achievementsController = makeAchievementsController(achievementsService);
     const achievementsRouter = makeAchievementsRouter(achievementsController);
     initAchievementsListeners(achievementsService);
-
-    const userStatusService = makeUserStatusService();
-    const userStatsRepo = makeUserStatsRepo(db);
-    const userStatsService = makeUserStatsService(userStatsRepo);
-    userStatsService.initListeners();
-    userStatsService.initScheduler();
-    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService, userStatsService);
-    const userController = makeUserController(userService);
-    const userRouter = makeUserRouter(userController);
 
     const notificationRepo = makeNotificationsRepo(db);
     const notificationService = makeNotificationsService(notificationRepo);
@@ -122,6 +115,22 @@ export function buildContainer() {
     const eventsService = makeEventsService(eventsRepo, userRepo);
     const eventsController = makeEventsController(eventsService);
     const eventsRouter = makeEventsRouter(eventsController);
+
+    const userStatusService = makeUserStatusService();
+    const userStatsRepo = makeUserStatsRepo(db);
+    const userStatsService = makeUserStatsService(userStatsRepo);
+    userStatsService.initListeners();
+    userStatsService.initScheduler();
+    const userTimelineService = makeUserTimelineService({
+        officeSlots: officeSlotsService,
+        parkingSlots: parkingSlotsService,
+        events: eventsService,
+        friendship: friendshipService,
+    });
+    const userTimelineController = makeUserTimelineController(userTimelineService);
+    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService, userStatsService);
+    const userController = makeUserController(userService);
+    const userRouter = makeUserRouter(userController, userTimelineController);
 
     const teamsRepo = makeTeamsRepo(db);
     const teamsService = makeTeamsService(teamsRepo, userStatusService);
