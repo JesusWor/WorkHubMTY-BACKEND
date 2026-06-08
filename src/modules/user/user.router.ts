@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { UserController } from "./user.controller.js";
 import { authenticate, authorize, Roles, RolePolicy, asyncHandler } from "../../middleware/index.js";
+import { UserTimelineController } from "./timeline/user-timeline.controller.js";
+import { mountUserTimelineRoutes } from "./timeline/user-timeline.router.js";
 
-export function makeUserRouter(controller: UserController): Router {
+export function makeUserRouter(controller: UserController, timelineController: UserTimelineController): Router {
     const router = Router();
     const NOT_GUEST_POLICY: RolePolicy = { deny: [Roles.GUEST] };
     const ADMIN_ONLY_POLICY: RolePolicy = { allow: [Roles.ADMIN] };
@@ -22,6 +24,8 @@ export function makeUserRouter(controller: UserController): Router {
     router.get("/:eId", authenticate, authorize(NOT_GUEST_POLICY), asyncHandler(controller.getById));
 
     if (controller.TEMPORARY_CREATE) router.post("/create", asyncHandler(controller.TEMPORARY_CREATE));
+
+    mountUserTimelineRoutes(router, timelineController);
 
     return router;
 }

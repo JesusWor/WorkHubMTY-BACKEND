@@ -20,6 +20,7 @@ import {
     makeUserStatsRepo,
     makeUserStatsService,
 } from '../modules/user/index.js';
+import { makeUserTimelineService, makeUserTimelineController } from '../modules/user/index.js';
 import {
     makeAuthRepo,
     makeAuthService,
@@ -107,22 +108,6 @@ export function buildContainer() {
     const achievementsRouter = makeAchievementsRouter(achievementsController);
     initAchievementsListeners(achievementsService);
 
-    const userStatusService = makeUserStatusService();
-    const userStatsRepo = makeUserStatsRepo(db);
-    const userStatsService = makeUserStatsService(userStatsRepo);
-    userStatsService.initListeners();
-    userStatsService.initScheduler();
-    const userService = makeUserService(
-        userRepo,
-        roleRepo,
-        friendshipService,
-        achievementsService,
-        userStatusService,
-        userStatsService,
-    );
-    const userController = makeUserController(userService);
-    const userRouter = makeUserRouter(userController);
-
     const notificationRepo = makeNotificationsRepo(db);
     const notificationService = makeNotificationsService(notificationRepo);
     const notificationController = makeNotificationsController(notificationService);
@@ -132,6 +117,10 @@ export function buildContainer() {
     const authService = makeAuthService(authRepo);
     const authController = makeAuthController(authService);
     const authRouter = makeAuthRouter(authController);
+
+    const userStatusService = makeUserStatusService();
+    const userStatsRepo = makeUserStatsRepo(db);
+    const userStatsService = makeUserStatsService(userStatsRepo);
 
     const teamsRepo = makeTeamsRepo(db);
     const teamsService = makeTeamsService(teamsRepo, userStatusService);
@@ -146,7 +135,7 @@ export function buildContainer() {
         emitter: officeEvents,
         teamsService,
     });
-    
+
     const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
     const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
 
@@ -186,6 +175,26 @@ export function buildContainer() {
     const eventsService = makeEventsService(eventsRepo, userRepo);
     const eventsController = makeEventsController(eventsService);
     const eventsRouter = makeEventsRouter(eventsController);
+
+    userStatsService.initListeners();
+    userStatsService.initScheduler();
+    const userTimelineService = makeUserTimelineService({
+        officeSlots: officeSlotsService,
+        parkingSlots: parkingSlotsService,
+        events: eventsService,
+        friendship: friendshipService,
+    });
+    const userTimelineController = makeUserTimelineController(userTimelineService);
+    const userService = makeUserService(
+        userRepo,
+        roleRepo,
+        friendshipService,
+        achievementsService,
+        userStatusService,
+        userStatsService,
+    );
+    const userController = makeUserController(userService);
+    const userRouter = makeUserRouter(userController, userTimelineController);
 
     return {
         roleRouter,
