@@ -88,7 +88,7 @@ toolRegistry.register({
         const results = await searchWithFallback(baseQuery, services.officeSlots, trace);
 
         // Sort by name (code)
-        results.sort((a: any, b: any) => a.name.localeCompare(b.name, 'es', { numeric: true }));
+        results.sort((a: any, b: any) => a.code.localeCompare(b.code, 'es', { numeric: true }));
 
         return {
             count: results.length,
