@@ -15,6 +15,7 @@ import {
     AvailableReservablesQuerySchema,
     ReservationIdBodySchema,
     ReservationDetailQuerySchema,
+    SlotCodeParamSchema,
 } from './office-slots.schema.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
@@ -45,6 +46,9 @@ export type OfficeSlotsController = {
 
     // Vista por usuario
     getUserReservationsList: (req: Request, res: Response) => Promise<void>;
+
+    // Self check-in by slot code
+    slotCheckin: (req: Request, res: Response) => Promise<void>;
 };
 
 export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSlotsController {
@@ -276,6 +280,26 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         GlobalResponse.okWithData(res, result);
     };
 
+    const slotCheckin = async (req: Request, res: Response): Promise<void> => {
+        const parsed = SlotCodeParamSchema.safeParse(req.params);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const caller = req.user as JwtPayload;
+        try {
+            const result = await service.slotCheckin(parsed.data.code, caller);
+            GlobalResponse.okWithData(res, result);
+        } catch (err: any) {
+            // 425 Too Early — send structured early-checkin payload
+            if (err?.statusCode === 425) {
+                res.status(425).json({ data: err.payload });
+                return;
+            }
+            throw err;
+        }
+    };
+
     // Blocks
 
     const createBlockBatch = async (req: Request, res: Response): Promise<void> => {
@@ -321,5 +345,6 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         patchParticipantAttendance,
 
         getUserReservationsList,
+        slotCheckin,
     };
 }

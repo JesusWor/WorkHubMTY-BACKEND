@@ -314,3 +314,29 @@ export const UserIdParamSchema = z.object({
     userId: z.string().min(1),
 });
 
+export const SlotCodeParamSchema = z.object({
+    code: z.string().min(1).max(32),
+});
+
+export type SlotCodeParam = z.infer<typeof SlotCodeParamSchema>;
+
+export type EarlyCheckinNextReservation = {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reservable_code: string;
+};
+
+export type EarlyCheckinReservationSummary = {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reservable_code: string;
+    minutesUntilCheckin: number;
+};
+
+export type EarlyCheckinResponse = {
+    nextReservation: EarlyCheckinNextReservation | null;
+    todayReservations: EarlyCheckinReservationSummary[];
+    minutesUntilCheckinAvailable: number;
+};
