@@ -68,6 +68,11 @@ export type OfficeSlotsRepo = {
         friendIds: string[],
     ) => Promise<ListReservationsPage>;
     getReservationsByUser: (userId: string) => Promise<ReservationWithParticipants[]>;
+    getReservationsByUserInRange: (
+        userId: string,
+        startTime: string,
+        endTime: string,
+    ) => Promise<ReservationWithParticipants[]>;
 
     createReservationBatch: (
         creatorId: string,
@@ -551,6 +556,37 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             }),
         );
     };
+    const getReservationsByUserInRange = async (
+        userId: string,
+        startTime: string,
+        endTime: string,
+    ): Promise<ReservationWithParticipants[]> => {
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS}
+            FROM reservations r
+            INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
+            WHERE rp.user_id = ?
+                AND r.start_time < ?
+                AND r.end_time > ?
+            ORDER BY r.start_time ASC`,
+            [userId, endTime, startTime],
+        );
+
+        const reservations = (rows as ReservationRow[]).map(hydrateReservation);
+
+        return Promise.all(
+            reservations.map(async (res) => {
+                const reservable = (await getReservableById(res.reservable_id))!;
+                const participants = await getParticipantsByReservation(res.id);
+
+                return {
+                    ...res,
+                    reservable,
+                    participants,
+                };
+            }),
+        );
+    };
 
     const createReservationBatch = async (
         creatorId: string,
@@ -840,6 +876,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         getReservationWithParticipants,
         listReservations,
         getReservationsByUser,
+        getReservationsByUserInRange,
 
         createReservationBatch,
         cancelReservation,

@@ -1,13 +1,13 @@
-import { OfficeSlotsService } from "../../office-slots/office-slots.service.js";
-import { ParkingSlotsService } from "../../parking-slots/parking-slots.service.js";
-import { EventsService } from "../../guest-events/guest-events.service.js";
-import { FriendshipService } from "../../friendship/friendship.service.js";
-import { ReservationWithParticipants } from "../../office-slots/office-slots.schema.js";
-import { ReservationDetailResponse } from "../../parking-slots/parking-slots.schema.js";
-import { EventWithCreator } from "../../guest-events/guest-events.schema.js";
-import { JwtPayload } from "../../../middleware/index.js";
-import { UserTimelineQuery } from "./user-timeline.schema.js";
-import { BadRequestError } from "../../../shared/errors/AppError.js";
+import { OfficeSlotsService } from '../../office-slots/office-slots.service.js';
+import { ParkingSlotsService } from '../../parking-slots/parking-slots.service.js';
+import { EventsService } from '../../guest-events/guest-events.service.js';
+import { FriendshipService } from '../../friendship/friendship.service.js';
+import { ReservationWithParticipants } from '../../office-slots/office-slots.schema.js';
+import { ReservationDetailResponse } from '../../parking-slots/parking-slots.schema.js';
+import { EventWithCreator } from '../../guest-events/guest-events.schema.js';
+import { JwtPayload } from '../../../middleware/index.js';
+import { UserTimelineQuery } from './user-timeline.schema.js';
+import { BadRequestError } from '../../../shared/errors/AppError.js';
 
 export type UserTimelineEntry = {
     eId: string;
@@ -15,6 +15,7 @@ export type UserTimelineEntry = {
     parkingReservations?: ReservationDetailResponse[];
     events?: EventWithCreator[];
 };
+
 
 export type UserTimelineResponse = {
     from: string;
@@ -34,7 +35,7 @@ export type UserTimelineService = {
     getTimeline: (
         eId: string,
         caller: JwtPayload,
-        query: UserTimelineQuery
+        query: UserTimelineQuery,
     ) => Promise<UserTimelineResponse>;
 };
 
@@ -50,9 +51,8 @@ function validateDateOrder(from: string, to: string): void {
     }
 }
 
-const toDatetimeStart = (date: string) => `${date}T00:00:00.000Z`;
-const toDatetimeEnd   = (date: string) => `${date}T23:59:59.999Z`;
-
+const toDatetimeStart = (date: string) => `${date} 00:00:00`;
+const toDatetimeEnd = (date: string) => `${date} 23:59:59`;
 export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTimelineService {
     const { officeSlots, parkingSlots, events, friendship } = deps;
 
@@ -60,7 +60,11 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
         eId: string,
         caller: JwtPayload,
         query: UserTimelineQuery,
-        sharedEvents?: EventWithCreator[]
+        range: {
+            startTime: string;
+            endTime: string;
+        },
+        sharedEvents?: EventWithCreator[],
     ): Promise<UserTimelineEntry> {
         const entry: UserTimelineEntry = { eId };
 
@@ -69,53 +73,78 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
         if (query.includeOfficeReservations) {
             tasks.push(
                 officeSlots
-                    .getUserReservationsView(eId, caller)
+                    .getUserReservationsView(eId, caller, {
+                        startTime: range.startTime,
+                        endTime: range.endTime,
+                    })
                     .then(({ reservations }) => {
                         const categories = query.officeCategories;
-                        entry.officeReservations = categories && categories.length > 0
-                            ? reservations.filter((r) => categories.includes(r.category as any))
-                            : reservations;
-                    })
+
+                        entry.officeReservations =
+                            categories && categories.length > 0
+                                ? reservations.filter((r) =>
+                                    categories.includes(r.category as any),
+                                )
+                                : reservations;
+                    }),
             );
         }
 
-        if (query.includeParkingReservations) {
-            tasks.push(
-                parkingSlots
-                    .getUserReservations(eId)
-                    .then((reservations) => {
-                        entry.parkingReservations = reservations;
-                    })
-            );
-        }
+if (query.includeParkingReservations) {
+    tasks.push(
+        parkingSlots
+            .getUserReservations(eId, {
+                startTime: range.startTime,
+                endTime: range.endTime,
+            })
+            .then((reservations) => {
+                entry.parkingReservations = reservations;
+            }),
+    );
+}
 
         if (query.includeEvents) {
             entry.events = sharedEvents ?? [];
         }
 
         await Promise.all(tasks);
+
         return entry;
     }
 
     const getTimeline = async (
         eId: string,
         caller: JwtPayload,
-        query: UserTimelineQuery
+        query: UserTimelineQuery,
     ): Promise<UserTimelineResponse> => {
         const to = resolveToDate(query.to);
+
         validateDateOrder(query.from, to);
 
+        const range = {
+            startTime: toDatetimeStart(query.from),
+            endTime: toDatetimeEnd(to),
+        };
+
         let sharedEvents: EventWithCreator[] | undefined;
+
         if (query.includeEvents) {
             const page = await events.listEvents({
-                from: toDatetimeStart(query.from),
-                to:   toDatetimeEnd(to),
+                from: range.startTime,
+                to: range.endTime,
                 limit: 100,
             });
+
             sharedEvents = page.items;
         }
 
-        const userEntry = await buildEntry(eId, caller, query, sharedEvents);
+        const userEntry = await buildEntry(
+            eId,
+            caller,
+            query,
+            range,
+            sharedEvents,
+        );
 
         const response: UserTimelineResponse = {
             from: query.from,
@@ -123,7 +152,8 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
             user: userEntry,
         };
 
-        const shouldIncludePeers = query.includeFriends || query.includeEIds.length > 0;
+        const shouldIncludePeers =
+            query.includeFriends || query.includeEIds.length > 0;
 
         if (shouldIncludePeers) {
             const friendIds = await friendship.getFriendIds(eId);
@@ -142,8 +172,14 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
             if (peerSet.size > 0) {
                 response.friends = await Promise.all(
                     [...peerSet].map((friendEId) =>
-                        buildEntry(friendEId, caller, query, sharedEvents)
-                    )
+                        buildEntry(
+                            friendEId,
+                            caller,
+                            query,
+                            range,
+                            sharedEvents,
+                        ),
+                    ),
                 );
             } else {
                 response.friends = [];

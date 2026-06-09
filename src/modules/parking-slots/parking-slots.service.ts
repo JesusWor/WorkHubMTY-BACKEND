@@ -1,5 +1,5 @@
-import { ParkingSlotsRepo } from "./parking-slots.repo.js";
-import { FriendshipService } from "../friendship/friendship.service.js";
+import { ParkingSlotsRepo } from './parking-slots.repo.js';
+import { FriendshipService } from '../friendship/friendship.service.js';
 import {
     ParkingReservation,
     ParkingLot,
@@ -12,52 +12,47 @@ import {
     CreateParkingLot,
     UpdateParkingLot,
     ReservationBucketsResponse,
-} from "./parking-slots.schema.js";
+} from './parking-slots.schema.js';
 import {
     BadRequestError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
-} from "../../shared/errors/AppError.js";
-import { JwtPayload } from "../../shared/schemas/auth.schema.js";
-import { Roles } from "../../middleware/index.js";
-import { Queue } from "bullmq";
-import { NoShowJobData, CheckoutJobData } from "../../infra/queue/parking-queue.js";
-import { ParkingEventsEmitter } from "../../infra/events/parking-events.emitter.js";
+} from '../../shared/errors/AppError.js';
+import { JwtPayload } from '../../shared/schemas/auth.schema.js';
+import { Roles } from '../../middleware/index.js';
+import { Queue } from 'bullmq';
+import { NoShowJobData, CheckoutJobData } from '../../infra/queue/parking-queue.js';
+import { ParkingEventsEmitter } from '../../infra/events/parking-events.emitter.js';
 
 export const CHECKIN_TOLERANCE_MINUTES = 30;
 
 const ATTENDANCE_TRANSITIONS: Record<AttendanceStatus, AttendanceStatus[]> = {
-    NOT_ARRIVED: ["CHECKED_IN", "NO_SHOW"],
-    CHECKED_IN: ["CHECKED_OUT"],
+    NOT_ARRIVED: ['CHECKED_IN', 'NO_SHOW'],
+    CHECKED_IN: ['CHECKED_OUT'],
     CHECKED_OUT: [],
     NO_SHOW: [],
     CANCELED: [],
 };
 
-const NON_CANCELABLE_STATUSES: AttendanceStatus[] = ["CHECKED_IN", "CHECKED_OUT", "NO_SHOW"];
+const NON_CANCELABLE_STATUSES: AttendanceStatus[] = ['CHECKED_IN', 'CHECKED_OUT', 'NO_SHOW'];
 
-function assertValidAttendanceTransition(
-    current: AttendanceStatus,
-    next: AttendanceStatus
-): void {
+function assertValidAttendanceTransition(current: AttendanceStatus, next: AttendanceStatus): void {
     const allowed = ATTENDANCE_TRANSITIONS[current];
     if (!allowed.includes(next)) {
-        throw new ConflictError(
-            `Transición de attendance inválida: ${current} → ${next}`
-        );
+        throw new ConflictError(`Transición de attendance inválida: ${current} → ${next}`);
     }
 }
 
 async function computeProjection(
     repo: ParkingSlotsRepo,
     reservation: ParkingReservation,
-    lots: ParkingLot[]
-): Promise<ReservationDetailResponse["projection"]> {
+    lots: ParkingLot[],
+): Promise<ReservationDetailResponse['projection']> {
     const overlaps = await repo.getOverlaps(
         reservation.id,
         reservation.start_time,
-        reservation.end_time
+        reservation.end_time,
     );
 
     // Lista FIFO: overlaps + reserva propia, ordenados por created_at ASC
@@ -70,9 +65,7 @@ async function computeProjection(
             attendance_status: reservation.attendance_status,
             lifecycle_status: reservation.lifecycle_status,
         },
-    ].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
+    ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     const fifoPosition = allInFifo.findIndex((r) => r.id === reservation.id);
 
@@ -137,19 +130,25 @@ export type ParkingSlotsService = {
 
     // Reservations
     listReservations: (query: ListReservationsQuery) => Promise<ListReservationsPage>;
-    getUserReservations: (userId: string) => Promise<ReservationDetailResponse[]>;
+    getUserReservations: (
+        userId: string,
+        range?: {
+            startTime?: string;
+            endTime?: string;
+        },
+    ) => Promise<ReservationDetailResponse[]>;
     getReservationDetail: (id: number, requesterId?: string) => Promise<ReservationDetailResponse>;
     getBuckets: (query: ReservationBucketsQuery) => Promise<ReservationBucketsResponse>;
 
     createReservation: (
         requestingUser: JwtPayload,
-        data: { user_id?: string; start_time: Date; end_time: Date }
+        data: { user_id?: string; start_time: Date; end_time: Date },
     ) => Promise<ReservationDetailResponse>;
 
     patchAttendance: (
         id: number,
         next: AttendanceStatus,
-        requestingUser: JwtPayload
+        requestingUser: JwtPayload,
     ) => Promise<ParkingReservation>;
 
     cancelReservation: (id: number, requestingUser: JwtPayload) => Promise<ParkingReservation>;
@@ -158,8 +157,12 @@ export type ParkingSlotsService = {
     runNoShowSweep: () => Promise<number>;
 };
 
-export function makeParkingSlotsService({ repo, friendshipService, queue, emitter }: ParkingSlotsServiceDeps): ParkingSlotsService {
-
+export function makeParkingSlotsService({
+    repo,
+    friendshipService,
+    queue,
+    emitter,
+}: ParkingSlotsServiceDeps): ParkingSlotsService {
     // ── Parking Lots ──────────────────────────────────────────────────────────
 
     const getAllLots = async (): Promise<ParkingLot[]> => repo.getAllLots();
@@ -172,54 +175,66 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
 
     const createLot = async (data: CreateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.createLot(data.name, data.capacity, data.priority);
-        if (!lot) throw new ConflictError("No fue posible crear el cajón");
-        emitter.emit("parking.lot.created", lot);
+        if (!lot) throw new ConflictError('No fue posible crear el cajón');
+        emitter.emit('parking.lot.created', lot);
         return lot;
     };
 
     const updateLot = async (id: number, data: UpdateParkingLot): Promise<ParkingLot> => {
         const lot = await repo.updateLot(id, data);
         if (!lot) throw new NotFoundError(`El cajón ${id} no existe`);
-        emitter.emit("parking.lot.updated", lot);
+        emitter.emit('parking.lot.updated', lot);
         return lot;
     };
 
     const deleteLot = async (id: number): Promise<void> => {
         const deleted = await repo.deleteLot(id);
         if (!deleted) throw new NotFoundError(`El cajón ${id} no existe`);
-        emitter.emit("parking.lot.deleted", id);
+        emitter.emit('parking.lot.deleted', id);
     };
 
     // ── Reservations ──────────────────────────────────────────────────────────
 
     function assertValidReservationsLimit(limit: number): void {
         if (limit < 1 || limit > 100) {
-            throw new BadRequestError("limit debe estar entre 1 y 100");
+            throw new BadRequestError('limit debe estar entre 1 y 100');
         }
     }
 
     const listReservations = async (
-        query: ListReservationsQuery
+        query: ListReservationsQuery,
     ): Promise<ListReservationsPage> => {
         if (query.limit !== undefined) {
             assertValidReservationsLimit(query.limit);
         }
         return repo.listReservations(query);
     };
+    const getUserReservations = async (
+        userId: string,
+        range?: {
+            startTime?: string;
+            endTime?: string;
+        },
+    ): Promise<ReservationDetailResponse[]> => {
+        const reservations =
+            range?.startTime && range?.endTime
+                ? await repo.getReservationsByUserInRange(userId, range.startTime, range.endTime)
+                : await repo.getReservationsByUser(userId);
 
-    const getUserReservations = async (userId: string): Promise<ReservationDetailResponse[]> => {
-        const reservations = await repo.getReservationsByUser(userId);
-        return Promise.all(
-            reservations.map((r) => getReservationDetail(r.id, userId))
-        );
+        return Promise.all(reservations.map((r) => getReservationDetail(r.id, userId)));
     };
-
-    const getReservationDetail = async (id: number, requesterId?: string): Promise<ReservationDetailResponse> => {
+    const getReservationDetail = async (
+        id: number,
+        requesterId?: string,
+    ): Promise<ReservationDetailResponse> => {
         const reservation = await repo.getReservationById(id);
         if (!reservation) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        if (requesterId && !(await friendshipService.areFriends(reservation.user_id, requesterId))) {
-            throw new ForbiddenError("No tienes permiso para acceder a esta reservación");
+        if (
+            requesterId &&
+            !(await friendshipService.areFriends(reservation.user_id, requesterId))
+        ) {
+            throw new ForbiddenError('No tienes permiso para acceder a esta reservación');
         }
 
         const lots = await repo.getAllLots();
@@ -229,7 +244,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
     };
 
     const getBuckets = async (
-        query: ReservationBucketsQuery
+        query: ReservationBucketsQuery,
     ): Promise<ReservationBucketsResponse> => {
         const stepMs = Number(query.step_minutes) * 60 * 1000;
         const buckets: ReservationBucket[] = [];
@@ -243,14 +258,16 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             buckets.push({ timestamp: new Date(cursor), reservation_count: count });
             cursor = bucketEnd;
         }
-        const capacity = await repo.getAllLots().then((lots) => lots.reduce((sum, lot) => sum + lot.capacity, 0));
+        const capacity = await repo
+            .getAllLots()
+            .then((lots) => lots.reduce((sum, lot) => sum + lot.capacity, 0));
 
         return { capacity, buckets };
     };
 
     const createReservation = async (
         requestingUser: JwtPayload,
-        data: { user_id?: string; start_time: Date; end_time: Date }
+        data: { user_id?: string; start_time: Date; end_time: Date },
     ): Promise<ReservationDetailResponse> => {
         const isAdmin = requestingUser.role === Roles.ADMIN;
         let effectiveUserId = requestingUser.eId;
@@ -258,7 +275,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         if (data.user_id) {
             if (!isAdmin) {
                 throw new ForbiddenError(
-                    "Solo un admin puede crear reservaciones a nombre de otro usuario"
+                    'Solo un admin puede crear reservaciones a nombre de otro usuario',
                 );
             }
             effectiveUserId = data.user_id;
@@ -267,53 +284,53 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         const alreadyReserved = await repo.hasActiveReservation(
             effectiveUserId,
             data.start_time,
-            data.end_time
+            data.end_time,
         );
         if (alreadyReserved) {
             throw new ConflictError(
-                "Ya existe una reservación activa en ese horario para este usuario"
+                'Ya existe una reservación activa en ese horario para este usuario',
             );
         }
 
         const reservation = await repo.createReservation(
             effectiveUserId,
             data.start_time,
-            data.end_time
+            data.end_time,
         );
-        if (!reservation) throw new ConflictError("No fue posible crear la reservación");
+        if (!reservation) throw new ConflictError('No fue posible crear la reservación');
 
         try {
             await queue.add(
-                "no-show",
+                'no-show',
                 { reservationId: reservation.id },
                 {
                     delay: noShowDelay(reservation.start_time),
                     jobId: noShowJobId(reservation.id),
-                }
+                },
             );
             console.log(`[queue] no-show encolado para reservación ${reservation.id}`);
         } catch (err) {
-            console.error("[queue] Error al encolar no-show:", (err as Error).message);
+            console.error('[queue] Error al encolar no-show:', (err as Error).message);
         }
 
         try {
             await queue.add(
-                "auto-checkout",
+                'auto-checkout',
                 { reservationId: reservation.id },
                 {
                     delay: checkoutDelay(reservation.end_time),
                     jobId: checkoutJobId(reservation.id),
-                }
+                },
             );
             console.log(`[queue] auto-checkout encolado para reservación ${reservation.id}`);
         } catch (err) {
-            console.error("[queue] Error al encolar auto-checkout:", (err as Error).message);
+            console.error('[queue] Error al encolar auto-checkout:', (err as Error).message);
         }
 
         const lots = await repo.getAllLots();
         const projection = await computeProjection(repo, reservation, lots);
 
-        emitter.emit("parking.reservation.created", reservation);
+        emitter.emit('parking.reservation.created', reservation);
 
         return { reservation, projection };
     };
@@ -321,9 +338,10 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
     const patchAttendance = async (
         id: number,
         next: AttendanceStatus,
-        requestingUser: JwtPayload
+        requestingUser: JwtPayload,
     ): Promise<ParkingReservation> => {
-        const isAdminOrAttendant = requestingUser.role === Roles.ADMIN || requestingUser.role === Roles.ACCESS_ATTENDANT;
+        const isAdminOrAttendant =
+            requestingUser.role === Roles.ADMIN || requestingUser.role === Roles.ACCESS_ATTENDANT;
 
         const reservation = isAdminOrAttendant
             ? await repo.getReservationById(id)
@@ -333,9 +351,9 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             throw new NotFoundError(`La reservación ${id} no existe o no te pertenece`);
         }
 
-        if (reservation.attendance_status === "CANCELED") {
+        if (reservation.attendance_status === 'CANCELED') {
             throw new ConflictError(
-                "No se puede modificar la asistencia de una reservación cancelada"
+                'No se puede modificar la asistencia de una reservación cancelada',
             );
         }
 
@@ -344,22 +362,22 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         const updated = await repo.updateAttendanceStatus(id, next);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        if (next === "CHECKED_IN") {
+        if (next === 'CHECKED_IN') {
             await queue.remove(noShowJobId(id));
         }
 
-        if (next === "CHECKED_OUT" || next === "NO_SHOW") {
+        if (next === 'CHECKED_OUT' || next === 'NO_SHOW') {
             await queue.remove(noShowJobId(id));
             await queue.remove(checkoutJobId(id));
         }
 
-        emitter.emit("parking.reservation.attendance_updated", updated);
+        emitter.emit('parking.reservation.attendance_updated', updated);
         return updated;
     };
 
     const cancelReservation = async (
         id: number,
-        requestingUser: JwtPayload
+        requestingUser: JwtPayload,
     ): Promise<ParkingReservation> => {
         const isAdmin = requestingUser.role === Roles.ADMIN;
 
@@ -371,14 +389,14 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
             throw new NotFoundError(`La reservación ${id} no existe o no te pertenece`);
         }
 
-        if (reservation.attendance_status === "CANCELED") {
-            throw new ConflictError("La reservación ya está cancelada");
+        if (reservation.attendance_status === 'CANCELED') {
+            throw new ConflictError('La reservación ya está cancelada');
         }
 
         if (NON_CANCELABLE_STATUSES.includes(reservation.attendance_status)) {
             throw new ConflictError(
                 `No se puede cancelar una reservación con estado '${reservation.attendance_status}'. ` +
-                `La reservación ya fue consumida operativamente.`
+                    `La reservación ya fue consumida operativamente.`,
             );
         }
 
@@ -388,7 +406,7 @@ export function makeParkingSlotsService({ repo, friendshipService, queue, emitte
         await queue.remove(noShowJobId(id));
         await queue.remove(checkoutJobId(id));
 
-        emitter.emit("parking.reservation.canceled", updated);
+        emitter.emit('parking.reservation.canceled', updated);
         return updated;
     };
 

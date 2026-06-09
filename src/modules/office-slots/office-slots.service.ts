@@ -108,6 +108,11 @@ function maskParticipants(
     return participants.map((p) => (friendSet.has(p.user_id) ? p : maskParticipant(p, false)));
 }
 
+export type ReservationRangeFilter = {
+    startTime?: string;
+    endTime?: string;
+};
+
 export type OfficeSlotsServiceDeps = {
     repo: OfficeSlotsRepo;
     friendshipService: FriendshipService;
@@ -179,6 +184,7 @@ export type OfficeSlotsService = {
     getUserReservationsView: (
         targetUserId: string,
         caller: JwtPayload,
+        range?: ReservationRangeFilter,
     ) => Promise<{
         user_id: string;
         reservations: ReservationWithParticipants[];
@@ -308,7 +314,9 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!slot) throw new NotFoundError(`El slot ${data.reservable_id} no existe`);
         const teamMemberIds = (
             await Promise.all(data.teamIds.map((id) => deps.teamsService.getTeamMembers(id)))
-        ).flat().map(member => member.eId);
+        )
+            .flat()
+            .map((member) => member.eId);
 
         const combined = new Set([...data.participants, ...teamMemberIds]);
         const uniqueMembers = Array.from(combined);
@@ -562,17 +570,36 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     };
 
     // Vista por usuario
+    type ReservationRangeFilter = {
+        startTime?: string;
+        endTime?: string;
+    };
 
     const getUserReservationsView = async (
         targetUserId: string,
         caller: JwtPayload,
-    ): Promise<{ user_id: string; reservations: ReservationWithParticipants[] }> => {
-        const reservations = await repo.getReservationsByUser(targetUserId);
+        range?: ReservationRangeFilter,
+    ): Promise<{
+        user_id: string;
+        reservations: ReservationWithParticipants[];
+    }> => {
+        const reservations =
+            range?.startTime && range?.endTime
+                ? await repo.getReservationsByUserInRange(
+                      targetUserId,
+                      range.startTime,
+                      range.endTime,
+                  )
+                : await repo.getReservationsByUser(targetUserId);
+
         const friendSet = await getFriendSet(caller.eId);
 
         const masked = await Promise.all(reservations.map((r) => applyFriendMask(r, friendSet)));
 
-        return { user_id: targetUserId, reservations: masked };
+        return {
+            user_id: targetUserId,
+            reservations: masked,
+        };
     };
 
     // Block
