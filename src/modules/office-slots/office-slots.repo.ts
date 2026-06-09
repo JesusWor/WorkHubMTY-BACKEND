@@ -320,7 +320,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
     const getReservableById = async (id: number, detail = false): Promise<Reservable | null> => {
         const { rows } = await db.query(
-            `SELECT id, name, capacity, floor_id, is_blocked FROM reservables WHERE id = ?`,
+            `SELECT id, name, code, capacity, floor_id, is_blocked FROM reservables WHERE id = ?`,
             [id],
         );
         if (!rows.length) return null;
