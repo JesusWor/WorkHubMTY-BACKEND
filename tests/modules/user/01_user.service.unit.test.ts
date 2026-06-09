@@ -67,7 +67,7 @@ describe("UserService.getUsers", () => {
 
         await service.getUsers(
             {
-                name: "equipo",
+                query: "equipo",
                 exclude: ["friends", "sent_requests", "received_requests"],
                 excludeId: ["USR00005"],
                 limit: 10,
@@ -80,7 +80,7 @@ describe("UserService.getUsers", () => {
         expect(friendshipService.getSentRequests).toHaveBeenCalledWith("USR00001");
         expect(friendshipService.getReceivedRequests).toHaveBeenCalledWith("USR00001");
         expect(repo.listUsers).toHaveBeenCalledWith({
-            name: "equipo",
+            query: "equipo",
             exclude: ["friends", "sent_requests", "received_requests"],
             excludeId: ["USR00005", "USR00002", "USR00004", "USR00003"],
             limit: 10,

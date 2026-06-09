@@ -25,16 +25,25 @@
 
 import { describe, it, expect, afterAll } from 'vitest';
 import request from 'supertest';
-import { seed, useSeedSetup } from '../../setup';
-import { createTestApp } from '../../../src/app/testContainer';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../../utils/zod.util';
+import { shouldSkipDbIntegration } from '../../utils/test-env';
 
-const { app, db } = createTestApp();
+const skipDbIntegration = shouldSkipDbIntegration();
+const describeIfDb = skipDbIntegration ? describe.skip : describe;
+let app: any;
+let db: any;
+let seed: any;
 
-// Resetea roles, users y achievements antes de cada test
-useSeedSetup({ tables: ['roles', 'users', 'achievements', 'achievement_levels', 'user_achievements'] });
+if (!skipDbIntegration) {
+    const setup = await import('../../setup');
+    const testContainer = await import('../../../src/app/testContainer');
+    seed = setup.seed;
+    ({ app, db } = testContainer.createTestApp());
+    setup.useSeedSetup({ tables: ['roles', 'users', 'achievements', 'achievement_levels', 'user_achievements'] });
+}
 
 afterAll(async () => {
+    if (!db) return;
     await db.close();
 });
 
@@ -57,7 +66,7 @@ const validAchievementBody = {
 
 // ─── GET /api/achievements ─────────────────────────────────────────────────────
 
-describe('GET /api/achievements', () => {
+describeIfDb('GET /api/achievements', () => {
     it('retorna 401 si no está autenticado', async () => {
         await request(app)
             .get('/api/achievements')
@@ -90,7 +99,7 @@ describe('GET /api/achievements', () => {
 
 // ─── GET /api/achievements/:id ─────────────────────────────────────────────────
 
-describe('GET /api/achievements/:id', () => {
+describeIfDb('GET /api/achievements/:id', () => {
     it('retorna 401 si no está autenticado', async () => {
         await request(app).get('/api/achievements/1').expect(401);
     });
@@ -137,7 +146,7 @@ describe('GET /api/achievements/:id', () => {
 
 // ─── GET /api/achievements/code/:code ─────────────────────────────────────────
 
-describe('GET /api/achievements/code/:code', () => {
+describeIfDb('GET /api/achievements/code/:code', () => {
     it('retorna 401 si no está autenticado', async () => {
         await request(app).get('/api/achievements/code/TEST01').expect(401);
     });
@@ -170,7 +179,7 @@ describe('GET /api/achievements/code/:code', () => {
 
 // ─── POST /api/achievements ────────────────────────────────────────────────────
 
-describe('POST /api/achievements', () => {
+describeIfDb('POST /api/achievements', () => {
     it('retorna 401 si no está autenticado', async () => {
         await request(app)
             .post('/api/achievements')
@@ -238,7 +247,7 @@ describe('POST /api/achievements', () => {
 
 // ─── PATCH /api/achievements/progress ─────────────────────────────────────────
 
-describe('PATCH /api/achievements/progress', () => {
+describeIfDb('PATCH /api/achievements/progress', () => {
     it('retorna 401 si no está autenticado', async () => {
         await request(app)
             .patch('/api/achievements/progress')

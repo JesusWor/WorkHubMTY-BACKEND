@@ -1,14 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { makeParkingSlotsService } from '../../../src/modules/parking-slots/parking-slots.service.js';
-import { ParkingSlotsRepo } from '../../../src/modules/parking-slots/parking-slots.repo.js';
+import { setRequiredTestEnv } from '../../utils/test-env.js';
+import type { ParkingSlotsRepo } from '../../../src/modules/parking-slots/parking-slots.repo.js';
 import { BadRequestError } from '../../../src/shared/errors/AppError.js';
-import { JwtPayload } from '../../../src/shared/schemas/auth.schema.js';
-import { Roles } from '../../../src/middleware/index.js';
+import type { JwtPayload } from '../../../src/shared/schemas/auth.schema.js';
 import type {
     ParkingLot,
     ParkingReservation,
     ListReservationsPage,
 } from '../../../src/modules/parking-slots/parking-slots.schema.js';
+
+setRequiredTestEnv();
+const { makeParkingSlotsService } = await import('../../../src/modules/parking-slots/parking-slots.service.js');
 
 function makeReservation(id: number): ParkingReservation {
     return {
@@ -45,7 +47,7 @@ function makeMockRepo(overrides: Partial<ParkingSlotsRepo> = {}): ParkingSlotsRe
         getReservationsByUser: vi.fn(),
         getReservationByIdAndUser: vi.fn(),
         hasActiveReservation: vi.fn(),
-        getOverlaps: vi.fn(),
+        getOverlaps: vi.fn().mockResolvedValue([]),
         getReservationCountInWindow: vi.fn(),
         createReservation: vi.fn(),
         cancelReservation: vi.fn(),
@@ -57,7 +59,7 @@ function makeMockRepo(overrides: Partial<ParkingSlotsRepo> = {}): ParkingSlotsRe
     } as unknown as ParkingSlotsRepo;
 }
 
-const adminUser: JwtPayload = { eId: 'ADM00001', role: Roles.ADMIN };
+const adminUser: JwtPayload = { eId: 'ADM00001', role: 'ADMIN' as JwtPayload['role'] };
 
 describe('ParkingService.listReservations', () => {
     it('retorna la pagina del repo cuando el limit esta en rango', async () => {
@@ -152,6 +154,6 @@ describe('ParkingService smoke', () => {
             end_time: new Date('2025-06-02T18:00:00.000Z'),
         });
 
-        expect(reservation.id).toBe(99);
+        expect(reservation.reservation.id).toBe(99);
     });
 });
