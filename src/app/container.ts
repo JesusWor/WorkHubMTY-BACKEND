@@ -1,7 +1,16 @@
-import { createDb } from "../infra/db/db.js";
-import { makeChatController, makeChatRouter } from "../modules/chat/index.js";
-import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
-import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from "../modules/role/index.js";
+import { createDb } from '../infra/db/db.js';
+import {
+    makeNotificationsRouter,
+    makeNotificationsController,
+    makeNotificationsService,
+    makeNotificationsRepo,
+} from '../modules/notifications/index.js';
+import {
+    makeRoleRepo,
+    makeRoleService,
+    makeRoleController,
+    makeRoleRouter,
+} from '../modules/role/index.js';
 import {
     makeUserRepo,
     makeUserService,
@@ -10,20 +19,45 @@ import {
     makeUserRouter,
     makeUserStatsRepo,
     makeUserStatsService,
-} from "../modules/user/index.js";
-import { makeUserTimelineService, makeUserTimelineController } from "../modules/user/index.js";
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from "../modules/auth/index.js";
-import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
-import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from "../modules/friendship/index.js";
+} from '../modules/user/index.js';
+import { makeUserTimelineService, makeUserTimelineController } from '../modules/user/index.js';
+import {
+    makeAuthRepo,
+    makeAuthService,
+    makeAuthController,
+    makeAuthRouter,
+} from '../modules/auth/index.js';
+import {
+    makeTeamsRepo,
+    makeTeamsService,
+    makeTeamsController,
+    makeTeamsRouter,
+} from '../modules/teams/index.js';
+import {
+    makeFriendshipRepo,
+    makeFriendshipService,
+    makeFriendshipController,
+    makeFriendshipRouter,
+} from '../modules/friendship/index.js';
 import {
     makeAchievementsRepo,
     makeAchievementsService,
     makeAchievementsController,
     makeAchievementsRouter,
     initAchievementsListeners,
-} from "../modules/achievements/index.js";
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter } from "../modules/office-slots/index.js";
-import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
+} from '../modules/achievements/index.js';
+import {
+    makeOfficeSlotsRepo,
+    makeOfficeSlotsService,
+    makeOfficeSlotsController,
+    makeOfficeSlotsRouter,
+} from '../modules/office-slots/index.js';
+import {
+    makeParkingSlotsRepo,
+    makeParkingSlotsService,
+    makeParkingSlotsController,
+    makeParkingSlotsRouter,
+} from '../modules/parking-slots/index.js';
 
 import {
     makeEventsRepo,
@@ -31,12 +65,30 @@ import {
     makeEventsController,
     makeEventsRouter,
 } from '../modules/guest-events/index.js';
-import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
+import {
+    makeReportsRepo,
+    makeReportsService,
+    makeReportsController,
+    makeReportsRouter,
+} from '../modules/reports/index.js';
 
-import { officeEvents, parkingEvents, teamEvents, userEvents } from "../infra/events/index.js";
-import { initOfficeBroadcaster, initParkingBroadcaster, initTeamBroadcaster, initUserBroadcaster } from "../infra/websocket/index.js";
-import { createOfficeWorker, createParkingWorker, officeQueue, parkingQueue } from "../infra/queue/index.js";
-
+import { officeEvents, parkingEvents, teamEvents, userEvents } from '../infra/events/index.js';
+import {
+    initOfficeBroadcaster,
+    initParkingBroadcaster,
+    initTeamBroadcaster,
+    initUserBroadcaster,
+} from '../infra/websocket/index.js';
+import {
+    createOfficeWorker,
+    createParkingWorker,
+    officeQueue,
+    parkingQueue,
+} from '../infra/queue/index.js';
+import {
+    makeChatController,
+    makeChatRouter,
+} from '../modules/chat/index.js';
 
 export function buildContainer() {
     const db = createDb();
@@ -70,13 +122,24 @@ export function buildContainer() {
     const authController = makeAuthController(authService);
     const authRouter = makeAuthRouter(authController);
 
+    const userStatusService = makeUserStatusService();
+    const userStatsRepo = makeUserStatsRepo(db);
+    const userStatsService = makeUserStatsService(userStatsRepo);
+
+    const teamsRepo = makeTeamsRepo(db);
+    const teamsService = makeTeamsService(teamsRepo, userStatusService);
+    const teamsController = makeTeamsController(teamsService);
+    const teamsRouter = makeTeamsRouter(teamsController);
+
     const officeSlotsRepo = makeOfficeSlotsRepo(db);
     const officeSlotsService = makeOfficeSlotsService({
         repo: officeSlotsRepo,
         friendshipService,
         queue: officeQueue,
         emitter: officeEvents,
+        teamsService,
     });
+
     const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
     const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
 
@@ -117,9 +180,6 @@ export function buildContainer() {
     const eventsController = makeEventsController(eventsService);
     const eventsRouter = makeEventsRouter(eventsController);
 
-    const userStatusService = makeUserStatusService();
-    const userStatsRepo = makeUserStatsRepo(db);
-    const userStatsService = makeUserStatsService(userStatsRepo);
     userStatsService.initListeners();
     userStatsService.initScheduler();
     const userTimelineService = makeUserTimelineService({
@@ -129,14 +189,16 @@ export function buildContainer() {
         friendship: friendshipService,
     });
     const userTimelineController = makeUserTimelineController(userTimelineService);
-    const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService, userStatsService);
+    const userService = makeUserService(
+        userRepo,
+        roleRepo,
+        friendshipService,
+        achievementsService,
+        userStatusService,
+        userStatsService,
+    );
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController, userTimelineController);
-
-    const teamsRepo = makeTeamsRepo(db);
-    const teamsService = makeTeamsService(teamsRepo, userStatusService);
-    const teamsController = makeTeamsController(teamsService);
-    const teamsRouter = makeTeamsRouter(teamsController);
 
     const chatController = makeChatController({
         officeSlots: officeSlotsService,
@@ -167,4 +229,4 @@ export function buildContainer() {
         teamsService,
         chatRouter,
     };
-};
+}

@@ -32,6 +32,7 @@ import { Roles, SUPERVISOR_ROLES } from '../../shared/types/role.type.js';
 import { Queue } from 'bullmq';
 import { OfficeNoShowJobData, OfficeCheckoutJobData } from '../../infra/queue/office-queue.js';
 import { OfficeEventsEmitter } from '../../infra/events/office-events.emitter.js';
+import { TeamsService } from '../teams/teams.service.js';
 
 const CHECKIN_TOLERANCE_MINUTES = 30;
 
@@ -110,6 +111,7 @@ function maskParticipants(
 export type OfficeSlotsServiceDeps = {
     repo: OfficeSlotsRepo;
     friendshipService: FriendshipService;
+    teamsService: TeamsService;
     queue: Queue<OfficeNoShowJobData | OfficeCheckoutJobData>;
     emitter: OfficeEventsEmitter;
 };
@@ -304,6 +306,12 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     ): Promise<ReservationWithParticipants[]> => {
         const slot = await repo.getReservableById(data.reservable_id);
         if (!slot) throw new NotFoundError(`El slot ${data.reservable_id} no existe`);
+        const teamMemberIds = (
+            await Promise.all(data.teamIds.map((id) => deps.teamsService.getTeamMembers(id)))
+        ).flat().map(member => member.eId);
+
+        const combined = new Set([...data.participants, ...teamMemberIds]);
+        const uniqueMembers = Array.from(combined);
 
         const created = await repo.createReservationBatch(
             caller.eId,
@@ -311,7 +319,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             data.category,
             data.description,
             data.timestamps,
-            data.participants,
+            uniqueMembers,
         );
 
         if (!created.length) throw new ConflictError('No fue posible crear ninguna reservación');
