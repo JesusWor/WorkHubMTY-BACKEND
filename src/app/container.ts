@@ -85,6 +85,10 @@ import {
     officeQueue,
     parkingQueue,
 } from '../infra/queue/index.js';
+import {
+    makeChatController,
+    makeChatRouter,
+} from '../modules/chat/index.js';
 
 export function buildContainer() {
     const db = createDb();
@@ -196,6 +200,13 @@ export function buildContainer() {
     const userController = makeUserController(userService);
     const userRouter = makeUserRouter(userController, userTimelineController);
 
+    const chatController = makeChatController({
+        officeSlots: officeSlotsService,
+        parkingSlots: parkingSlotsService,
+        user: userService,
+    });
+    const chatRouter = makeChatRouter(chatController);
+
     return {
         roleRouter,
         userRouter,
@@ -216,5 +227,6 @@ export function buildContainer() {
         reportsRouter,
         eventsRouter,
         teamsService,
+        chatRouter,
     };
 }

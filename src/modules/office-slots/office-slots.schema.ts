@@ -66,7 +66,8 @@ export const PARTICIPANT_USER_TRANSITIONS: Record<string, ParticipantAttendanceS
 
 export const ReservableSchema = z.object({
     id: z.number().int(),
-    name: z.string().min(1).max(32),
+    code: z.string().min(1).max(32),
+    name: z.string().max(50).nullable(),
     capacity: z.number().int().min(1),
     floor: z.string(),
     status:z.enum(['available', 'occupied', 'soon', 'blocked']),
@@ -313,3 +314,29 @@ export const UserIdParamSchema = z.object({
     userId: z.string().min(1),
 });
 
+export const SlotCodeParamSchema = z.object({
+    code: z.string().min(1).max(32),
+});
+
+export type SlotCodeParam = z.infer<typeof SlotCodeParamSchema>;
+
+export type EarlyCheckinNextReservation = {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reservable_code: string;
+};
+
+export type EarlyCheckinReservationSummary = {
+    id: number;
+    start_time: string;
+    end_time: string;
+    reservable_code: string;
+    minutesUntilCheckin: number;
+};
+
+export type EarlyCheckinResponse = {
+    nextReservation: EarlyCheckinNextReservation | null;
+    todayReservations: EarlyCheckinReservationSummary[];
+    minutesUntilCheckinAvailable: number;
+};

@@ -20,6 +20,7 @@ import {
     AvailableReservablesQuery,
     ReservationSummary,
     GetReservationsForSlotFilters,
+    EarlyCheckinResponse,
 } from './office-slots.schema.js';
 import {
     BadRequestError,
@@ -189,6 +190,11 @@ export type OfficeSlotsService = {
         user_id: string;
         reservations: ReservationWithParticipants[];
     }>;
+
+    slotCheckin: (
+        slotCode: string,
+        caller: JwtPayload,
+    ) => Promise<{ reservationId: number }>;
 };
 
 export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlotsService {
@@ -643,6 +649,77 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         });
     };
 
+    const slotCheckin = async (
+        slotCode: string,
+        caller: JwtPayload,
+    ): Promise<{ reservationId: number }> => {
+        const reservable = await repo.getReservableByCode(slotCode);
+        if (!reservable) throw new NotFoundError(`El espacio '${slotCode}' no existe`);
+
+        const candidates = await repo.getTodayReservationsByUserAndSlot(
+            caller.eId,
+            reservable.id,
+        );
+
+        if (candidates.length === 0) {
+            throw new NotFoundError(
+                `No tienes reservaciones activas para el espacio '${slotCode}' hoy`,
+            );
+        }
+
+        const CHECKIN_WINDOW_MINUTES = 60;
+        const nowMs = Date.now();
+
+        // Sort ascending; find first within window
+        const sorted = [...candidates].sort(
+            (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+        );
+
+        const eligible = sorted.find((r) => {
+            const startMs = new Date(r.start_time).getTime();
+            const windowOpenMs = startMs - CHECKIN_WINDOW_MINUTES * 60 * 1000;
+            return nowMs >= windowOpenMs;
+        });
+
+        if (eligible) {
+            const { reservation } = await participantCheckin(eligible.id, caller);
+            return { reservationId: reservation.id };
+        }
+
+        // No eligible reservation — build EarlyCheckinResponse
+        const next = sorted[0];
+        const nextStartMs = new Date(next.start_time).getTime();
+        const windowOpenMs = nextStartMs - CHECKIN_WINDOW_MINUTES * 60 * 1000;
+        const minutesUntilCheckinAvailable = Math.ceil((windowOpenMs - nowMs) / 60_000);
+
+        const earlyPayload: EarlyCheckinResponse = {
+            nextReservation: {
+                id: next.id,
+                start_time: new Date(next.start_time).toISOString(),
+                end_time: new Date(next.end_time).toISOString(),
+                reservable_code: reservable.code,
+            },
+            todayReservations: sorted.slice(1).map((r) => {
+                const rStartMs = new Date(r.start_time).getTime();
+                const rWindowMs = rStartMs - CHECKIN_WINDOW_MINUTES * 60_000;
+                return {
+                    id: r.id,
+                    start_time: new Date(r.start_time).toISOString(),
+                    end_time: new Date(r.end_time).toISOString(),
+                    reservable_code: reservable.code,
+                    minutesUntilCheckin: Math.max(0, Math.ceil((rWindowMs - nowMs) / 60_000)),
+                };
+            }),
+            minutesUntilCheckinAvailable,
+        };
+
+        // Throw a structured early-checkin error — controller catches and sends 425
+        const err: any = new Error('EARLY_CHECKIN');
+        err.statusCode = 425;
+        err.payload = earlyPayload;
+        throw err;
+    };
+
     return {
         getAllReservables,
         getAvailableReservables,
@@ -671,5 +748,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         patchParticipantAttendance,
 
         getUserReservationsView,
+
+        slotCheckin,
     };
 }

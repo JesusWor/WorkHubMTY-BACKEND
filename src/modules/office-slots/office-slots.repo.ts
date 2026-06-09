@@ -120,6 +120,12 @@ export type OfficeSlotsRepo = {
         checkinToleranceMinutes: number,
     ) => Promise<Array<Pick<Reservation, 'id' | 'start_time'>>>;
     getPendingCheckoutReservations: () => Promise<Array<Pick<Reservation, 'id' | 'end_time'>>>;
+
+    getReservableByCode: (code: string) => Promise<Reservable | null>;
+    getTodayReservationsByUserAndSlot: (
+        userId: string,
+        reservableId: number,
+    ) => Promise<ReservationRow[]>;
 };
 type GetReservationsForSlotFilters = {
     dates?: string[];
@@ -862,6 +868,51 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         return rows as Array<Pick<Reservation, 'id' | 'end_time'>>;
     };
 
+    const getReservableByCode = async (code: string): Promise<Reservable | null> => {
+        const { rows } = await db.query(
+            `SELECT
+                r.id,
+                r.name,
+                r.code,
+                r.capacity,
+                f.name AS floor,
+                r.is_blocked,
+                'available' AS status
+             FROM reservables r
+             JOIN floors f ON f.id = r.floor_id
+             WHERE r.code = ?
+             LIMIT 1`,
+            [code],
+        );
+        if (!rows.length) return null;
+        return { ...rows[0], is_blocked: Boolean(rows[0].is_blocked) } as Reservable;
+    };
+
+    /**
+     * Returns all NOT_ARRIVED reservations for (userId, reservableId) that fall
+     * on today in Monterrey local time (UTC-6).
+     *
+     * "Today Monterrey" in UTC:  [CURDATE + 06:00, CURDATE + 1day + 06:00)
+     */
+    const getTodayReservationsByUserAndSlot = async (
+        userId: string,
+        reservableId: number,
+    ): Promise<ReservationRow[]> => {
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS}
+             FROM reservations r
+             INNER JOIN reservation_participants rp
+                     ON rp.reservations_id = r.id AND rp.user_id = ?
+             WHERE r.reservable_id = ?
+               AND r.attendance_status = 'NOT_ARRIVED'
+               AND r.start_time >= DATE_ADD(CURDATE(), INTERVAL 6 HOUR)
+               AND r.start_time <  DATE_ADD(DATE_ADD(CURDATE(), INTERVAL 1 DAY), INTERVAL 6 HOUR)
+             ORDER BY r.start_time ASC`,
+            [userId, reservableId],
+        );
+        return rows as ReservationRow[];
+    };
+
     return {
         getAllReservables,
         getAvailableReservables,
@@ -891,5 +942,8 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         markCheckoutForReservation,
         getPendingNoShowReservations,
         getPendingCheckoutReservations,
+
+        getReservableByCode,
+        getTodayReservationsByUserAndSlot,
     };
 }
