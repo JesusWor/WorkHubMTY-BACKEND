@@ -135,7 +135,7 @@ export type OfficeSlotsService = {
         slotId: number,
         filters: GetReservationsForSlotFilters,
         detail: boolean,
-        showInactiveReservations:boolean
+        showInactiveReservations: boolean
     ) => Promise<Reservation[] | ReservationSummary[]>;
 
     // Blocks
@@ -261,8 +261,8 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
     const getReservationsForSlot = async (
         slotId: number,
         filters: GetReservationsForSlotFilters,
-        detail:boolean,
-        showInactiveReservations:boolean
+        detail: boolean,
+        showInactiveReservations: boolean
     ) => {
 
         if (detail) {
@@ -290,6 +290,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!res) throw new NotFoundError(`La reservación ${id} no existe`);
 
         const friendSet = await getFriendSet(caller.eId);
+        if (caller.role === 'ADMIN') return res;
         return {
             ...res,
             participants: maskParticipants(
@@ -404,8 +405,8 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const updated = await repo.cancelReservation(id);
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
-        await queue.remove(noShowJobId(id)).catch(() => {});
-        await queue.remove(checkoutJobId(id)).catch(() => {});
+        await queue.remove(noShowJobId(id)).catch(() => { });
+        await queue.remove(checkoutJobId(id)).catch(() => { });
 
         emitter.emit('office.reservation.canceled', {
             reservation: updated,
@@ -452,7 +453,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             const updated = await repo.updateReservationAttendance(reservationId, 'CHECKED_IN');
             if (updated) {
                 updatedReservation = updated;
-                await queue.remove(noShowJobId(reservationId)).catch(() => {});
+                await queue.remove(noShowJobId(reservationId)).catch(() => { });
             }
         }
 
@@ -518,11 +519,11 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!updated) throw new NotFoundError(`La reservación ${id} no existe`);
 
         if (next === 'CHECKED_IN') {
-            await queue.remove(noShowJobId(id)).catch(() => {});
+            await queue.remove(noShowJobId(id)).catch(() => { });
         }
         if (next === 'CHECKED_OUT' || next === 'NO_SHOW') {
-            await queue.remove(noShowJobId(id)).catch(() => {});
-            await queue.remove(checkoutJobId(id)).catch(() => {});
+            await queue.remove(noShowJobId(id)).catch(() => { });
+            await queue.remove(checkoutJobId(id)).catch(() => { });
         }
 
         const allParticipants = await repo.getParticipantsByReservation(id);
@@ -543,7 +544,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         next: ParticipantAttendanceStatus,
         caller: JwtPayload,
     ): Promise<Participant> => {
-        const res = await repo.getReservationById(reservationId);
+        let res = await repo.getReservationById(reservationId);
         if (!res) throw new NotFoundError(`La reservación ${reservationId} no existe`);
 
         if (res.attendance_status === 'CANCELED') {
@@ -567,6 +568,19 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!updated) throw new NotFoundError('No fue posible actualizar el participante');
 
         const allParticipants = await repo.getParticipantsByReservation(reservationId);
+
+        if (updated.attendance_status === 'CHECKED_OUT') {
+            const hasRemainingCheckins = allParticipants.some((p) => p.attendance_status === 'CHECKED_IN')
+
+            if (!hasRemainingCheckins) {
+                try {
+                    const newRes = await repo.updateReservationAttendance(reservationId, 'CHECKED_OUT')
+                    if (!newRes) throw new NotFoundError();
+                    res = newRes;
+                } catch { }
+            }
+        }
+
         const slot = (await repo.getReservableById(res.reservable_id))!;
 
         emitter.emit('office.participant.updated', {
@@ -595,10 +609,10 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const reservations =
             range?.startTime && range?.endTime
                 ? await repo.getReservationsByUserInRange(
-                      targetUserId,
-                      range.startTime,
-                      range.endTime,
-                  )
+                    targetUserId,
+                    range.startTime,
+                    range.endTime,
+                )
                 : await repo.getReservationsByUser(targetUserId);
 
         const friendSet = await getFriendSet(caller.eId);

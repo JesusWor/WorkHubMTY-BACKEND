@@ -617,7 +617,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             const { rows: overlapping } = await db.query(
                 `SELECT id FROM reservations
                  WHERE reservable_id = ?
-                   AND attendance_status NOT IN ('CANCELED')
+                   AND attendance_status NOT IN ('CANCELED', 'NO_SHOW', 'CHECKED_OUT')
                    AND start_time < ?
                    AND end_time > ?
                  LIMIT 1`,
