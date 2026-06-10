@@ -181,7 +181,7 @@ export type OfficeSlotsService = {
         participantId: number,
         next: ParticipantAttendanceStatus,
         caller: JwtPayload,
-    ) => Promise<Participant>;
+    ) => Promise<ReservationWithParticipants>;
 
     // User view
     getUserReservationsView: (
@@ -545,7 +545,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         participantId: number,
         next: ParticipantAttendanceStatus,
         caller: JwtPayload,
-    ): Promise<Participant> => {
+    ): Promise<ReservationWithParticipants> => {
         let res = await repo.getReservationById(reservationId);
         if (!res) throw new NotFoundError(`La reservación ${reservationId} no existe`);
 
@@ -591,7 +591,9 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             reservable: slot,
         });
 
-        return updated;
+        const all = await getReservationDetail(reservationId, caller);
+
+        return all;
     };
 
     const getUserReservationsView = async (
