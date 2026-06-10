@@ -21,7 +21,7 @@ export type UserRepo = {
     listUsers: (query: ListUsersQuery) => Promise<ListUsersPage>;
 
     getAllByName: (name: string) => Promise<User[]>;
-    TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => Promise<User>;
+    TEMPORARY_CREATE: (eId: string, name: string, email: string, hashedPassword: string, roleId: number, title: string|null) => Promise<User>;
 }
 
 function uniqueIds(ids: string[]): string[] {
@@ -308,12 +308,12 @@ export function makeUserRepo(db: Db): UserRepo {
         return result.items;
     };
 
-    const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number) => {
+    const TEMPORARY_CREATE = async (eId: string, name: string, email: string, hashedPassword: string, roleId: number, title: string|null) => {
         const { affectedCount } = await db.execute(
             `
-            INSERT INTO users (e_id, name, email, password_hash, role_id, create_time)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-            [eId, name, email, hashedPassword, roleId, new Date()],
+            INSERT INTO users (e_id, name, email, password_hash, role_id, title, create_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [eId, name, email, hashedPassword, roleId, title ?? null, new Date()],
         );
 
         if (!affectedCount) {

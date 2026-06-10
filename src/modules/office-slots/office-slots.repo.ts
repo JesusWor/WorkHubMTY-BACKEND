@@ -177,6 +177,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             r.code,
             r.capacity,
             f.name AS floor,
+            f.id AS floor_id,
             r.is_blocked,
 
             CASE
@@ -292,6 +293,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             r.code,
             r.capacity,
             f.name AS floor,
+            f.id AS floor_id,
             r.is_blocked,
 
             CASE
@@ -885,6 +887,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
                 r.code,
                 r.capacity,
                 f.name AS floor,
+                f.id AS floor_id,
                 r.is_blocked,
                 'available' AS status
              FROM reservables r

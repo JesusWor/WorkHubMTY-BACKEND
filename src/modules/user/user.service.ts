@@ -35,7 +35,7 @@ export type UserService = {
     updateGuest: (guestId: number, name?: string, email?: string) => Promise<Guest>;
     removeGuest: (guestId: number) => Promise<boolean>;
 
-    TEMPORARY_CREATE?: (eId: string, name: string, email: string, password: string, role: string) => Promise<User>;
+    TEMPORARY_CREATE?: (eId: string, name: string, email: string, password: string, role: string, title: string|null) => Promise<User>;
 };
 
 export async function enrichWithStatus(users: User[], statusService: UserStatusService): Promise<User[]> {
@@ -211,7 +211,7 @@ export function makeUserService(
         return removed;
     };
 
-    const TEMPORARY_CREATE = async (eId: string, name: string, email: string, password: string, role: string): Promise<User> => {
+    const TEMPORARY_CREATE = async (eId: string, name: string, email: string, password: string, role: string, title: string|null): Promise<User> => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const roles = await roleRepo.getByName(role);
@@ -221,10 +221,10 @@ export function makeUserService(
             const createdRole = await roleRepo.create({ name: role });
             console.log(createdRole);
             if (!createdRole) throw new InternalError("Could not create role");
-            return await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, createdRole.id);
+            return await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, createdRole.id, title);
         }
 
-        await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, roles[0].id);
+        await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, roles[0].id, title);
         const user = await getById(eId);
 
         if (user) {

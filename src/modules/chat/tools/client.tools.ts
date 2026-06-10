@@ -5,22 +5,30 @@ toolRegistry.register({
     name: 'showSpaceCarousel',
     label: 'Mostrando espacios disponibles',
     description:
-        'Muestra un carrusel visual de espacios disponibles para que el usuario elija. ' +
-        'Úsalo después de obtener resultados de getAvailableReservables cuando hay múltiples opciones. ' +
-        'El frontend devuelve el id del espacio seleccionado (o null si cancela).',
+        'Muestra un carrusel interactivo de espacios de oficina disponibles para que el usuario elija. ' +
+        'CUÁNDO llamar: SIEMPRE que getAvailableReservables devuelva 2 o más espacios. ' +
+        'CÓMO llamar: pasa el array "spaces" completo recibido de getAvailableReservables (máx 20 elementos). ' +
+        'El campo "id" de cada espacio es el surrogate PK numérico — el frontend lo devuelve como "selected_id" al elegir. ' +
+        'El campo "name" debe ser el CODE del espacio (ej: "MZ001"), no el id numérico. ' +
+        'NO generes una lista de texto como sustituto de este widget — siempre llama esta herramienta.',
     target: 'CLIENT',
     schema: z.object({
         spaces: z.array(
             z.object({
-                id: z.number().int(),
-                name: z.string(),
-                capacity: z.number().int(),
-                floor: z.string(),
-                status: z.string(),
+                id: z.number().int()
+                    .describe('Surrogate PK numérico del espacio — se devuelve como selected_id al usuario elegir.'),
+                name: z.string()
+                    .describe('Code del espacio (ej: "MZ001", "ICSJ-3040") — es el identificador legible para el usuario.'),
+                capacity: z.number().int()
+                    .describe('Capacidad del espacio.'),
+                floor: z.string()
+                    .describe('Nombre del piso (ej: "Piso 2").'),
+                status: z.string()
+                    .describe('Estado: "available", "occupied", "soon" o "blocked".'),
             }),
-        ).min(1).describe('Lista de espacios disponibles'),
+        ).min(1).max(20).describe('Lista de espacios a mostrar en el carrusel (máximo 20).'),
         context: z.string()
-            .describe('Descripción del contexto (ej: "mañana de 3pm a 5pm")'),
+            .describe('Descripción del contexto de búsqueda que ve el usuario, ej: "Hoy de 8am a 12pm · 159 disponibles".'),
     }),
 });
 

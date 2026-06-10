@@ -54,7 +54,7 @@ export function makeEventsController(service: EventsService): EventsController {
         }
 
         await service.resendToGuest(eventId, guestParsed.data);
-        GlobalResponse.ok(res, 'Correo reenviado');
+        GlobalResponse.okNoContent(res, 'Correo reenviado');
     };
 
     const patchEvent = async (req: Request, res: Response): Promise<void> => {
