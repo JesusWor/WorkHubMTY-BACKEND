@@ -21,7 +21,7 @@ async function searchWithFallback(
             ? { ...baseQuery, query: undefined, minCapacity: undefined, maxCapacity: undefined }
             : null,
         // 4. Drop floor filter (keep time only)
-        baseQuery.floorId
+        baseQuery.floor
             ? { ...baseQuery, query: undefined, minCapacity: undefined, maxCapacity: undefined, floorId: undefined }
             : null,
         // 5. No filters at all — just availability check
@@ -165,7 +165,7 @@ toolRegistry.register({
     target: 'SERVER',
     schema: z.object({}),
     handler: async (_args, ctx, services, _trace) => {
-        return services.officeSlots.getMyReservations(ctx.user);
+        return services.officeSlots.getMyReservations(ctx.user, 'all');
     },
 });
 
