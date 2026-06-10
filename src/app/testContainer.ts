@@ -1,10 +1,46 @@
 import { Request, Response, NextFunction } from 'express';
 import { createApp } from './app.js';
 import { createDb } from '../infra/db/db.js';
-import { makeAuthRepo, makeAuthService, makeAuthController, makeAuthRouter } from '../modules/auth/index.js';
-import { makeUserRepo, makeUserService, makeUserStatusService, makeUserController, makeUserRouter } from '../modules/user/index.js';
-import { makeRoleRepo, makeRoleService, makeRoleController, makeRoleRouter } from '../modules/role/index.js';
-import { makeFriendshipRepo, makeFriendshipService, makeFriendshipController, makeFriendshipRouter } from '../modules/friendship/index.js';
+import {
+  makeNotificationsRouter,
+  makeNotificationsController,
+  makeNotificationsService,
+  makeNotificationsRepo,
+} from '../modules/notifications/index.js';
+import {
+  makeRoleRepo,
+  makeRoleService,
+  makeRoleController,
+  makeRoleRouter,
+} from '../modules/role/index.js';
+import {
+  makeUserRepo,
+  makeUserService,
+  makeUserStatusService,
+  makeUserController,
+  makeUserRouter,
+  makeUserStatsRepo,
+  makeUserStatsService,
+} from '../modules/user/index.js';
+import { makeUserTimelineService, makeUserTimelineController } from '../modules/user/index.js';
+import {
+  makeAuthRepo,
+  makeAuthService,
+  makeAuthController,
+  makeAuthRouter,
+} from '../modules/auth/index.js';
+import {
+  makeTeamsRepo,
+  makeTeamsService,
+  makeTeamsController,
+  makeTeamsRouter,
+} from '../modules/teams/index.js';
+import {
+  makeFriendshipRepo,
+  makeFriendshipService,
+  makeFriendshipController,
+  makeFriendshipRouter,
+} from '../modules/friendship/index.js';
 import {
   makeAchievementsRepo,
   makeAchievementsService,
@@ -12,16 +48,49 @@ import {
   makeAchievementsRouter,
   initAchievementsListeners,
 } from '../modules/achievements/index.js';
-import { makeOfficeSlotsRepo, makeOfficeSlotsService, makeOfficeSlotsController, makeOfficeSlotsRouter, makeReservablesRouter, makeReservationsRouter, makeEventsRouter, makeWorkGroupsRouter } from "../modules/office-slots/index.js";
-import { makeNotificationsRouter, makeNotificationsController, makeNotificationsService, makeNotificationsRepo } from "../modules/notifications/index.js";
-import { makeParkingSlotsRepo, makeParkingSlotsService, makeParkingSlotsController, makeParkingSlotsRouter } from "../modules/parking-slots/index.js";
-import { makeReportsRepo, makeReportsService, makeReportsController, makeReportsRouter } from "../modules/reports/index.js";
-import { makeTeamsRepo, makeTeamsService, makeTeamsController, makeTeamsRouter } from "../modules/teams/index.js";
+import {
+  makeOfficeSlotsRepo,
+  makeOfficeSlotsService,
+  makeOfficeSlotsController,
+  makeOfficeSlotsRouter,
+} from '../modules/office-slots/index.js';
+import {
+  makeParkingSlotsRepo,
+  makeParkingSlotsService,
+  makeParkingSlotsController,
+  makeParkingSlotsRouter,
+} from '../modules/parking-slots/index.js';
 
-import { parkingQueue } from "../infra/queue/parking-queue.js";
-import { parkingEvents } from "../infra/events/parking-events.emitter.js";
-import { initParkingBroadcaster } from "../infra/websocket/broadcasters/parking-events.broadcaster.js";
-import { createParkingWorker } from "../infra/queue/parking-worker.js";
+import {
+  makeEventsRepo,
+  makeEventsService,
+  makeEventsController,
+  makeEventsRouter,
+} from '../modules/guest-events/index.js';
+import {
+  makeReportsRepo,
+  makeReportsService,
+  makeReportsController,
+  makeReportsRouter,
+} from '../modules/reports/index.js';
+
+import { officeEvents, parkingEvents, teamEvents, userEvents } from '../infra/events/index.js';
+import {
+  initOfficeBroadcaster,
+  initParkingBroadcaster,
+  initTeamBroadcaster,
+  initUserBroadcaster,
+} from '../infra/websocket/index.js';
+import {
+  createOfficeWorker,
+  createParkingWorker,
+  officeQueue,
+  parkingQueue,
+} from '../infra/queue/index.js';
+import {
+  makeChatController,
+  makeChatRouter,
+} from '../modules/chat/index.js';
 
 /**
  * Fake authenticate middleware — only for tests
@@ -52,104 +121,202 @@ export type TestContainerOptions = {
 };
 
 export function buildTestContainer(options: TestContainerOptions = {}) {
-  const { useRealAuth = true } = options;
-
   const db = createDb();
-
-  const authRepo = makeAuthRepo(db);
-  const authService = makeAuthService(authRepo);
-  const authController = makeAuthController(authService);
-  const authRouter = makeAuthRouter(authController);
 
   const roleRepo = makeRoleRepo(db);
   const roleService = makeRoleService(roleRepo);
   const roleController = makeRoleController(roleService);
   const roleRouter = makeRoleRouter(roleController);
 
-  const userRepo = makeUserRepo(db);
-
   const friendshipRepo = makeFriendshipRepo(db);
   const friendshipService = makeFriendshipService(friendshipRepo);
-
-  const achievementsRepo = makeAchievementsRepo(db);
-  const achievementsService = makeAchievementsService(achievementsRepo, userRepo);
-  const achievementsController = makeAchievementsController(achievementsService);
-  const achievementsRouter = makeAchievementsRouter(achievementsController);
-  initAchievementsListeners(achievementsService);
-
-  const userStatusService = makeUserStatusService();
-  const userService = makeUserService(userRepo, roleRepo, friendshipService, achievementsService, userStatusService);
-  const userController = makeUserController(userService);
-  const userRouter = makeUserRouter(userController);
-
-  const notificationRepo = makeNotificationsRepo(db);
-  const notificationService = makeNotificationsService(notificationRepo);
-  const notificationController = makeNotificationsController(notificationService);
-  const notificationRouter = makeNotificationsRouter(notificationController);
-
   const friendshipController = makeFriendshipController(friendshipService);
   const friendshipRouter = makeFriendshipRouter(friendshipController);
 
-  const officeSlotsRepo = makeOfficeSlotsRepo(db);
-  const officeSlotsService = makeOfficeSlotsService(officeSlotsRepo, friendshipService, userService);
-  const officeSlotsController = makeOfficeSlotsController(officeSlotsService);
-  const officeSlotsRouter = makeOfficeSlotsRouter(officeSlotsController);
-  const reservablesRouter = makeReservablesRouter(officeSlotsController);
-  const reservationsRouter = makeReservationsRouter(officeSlotsController);
-  const eventsRouter = makeEventsRouter(officeSlotsController);
-  const workGroupsRouter = makeWorkGroupsRouter(officeSlotsController);
+  const userRepo = makeUserRepo(db);
 
-  const parkingSlotsRepo = makeParkingSlotsRepo(db);
-  const parkingSlotsService = makeParkingSlotsService({
-    repo: parkingSlotsRepo,
-    friendshipService: friendshipService,
-    queue: parkingQueue,
-    emitter: parkingEvents,
-  });
-  const parkingSlotsController = makeParkingSlotsController(parkingSlotsService);
-  const parkingSlotsRouter = makeParkingSlotsRouter(parkingSlotsController);
+  const achievementsRepo = makeAchievementsRepo(db);
+  const achievementsService = makeAchievementsService(
+    achievementsRepo,
+    userRepo,
+  );
+  const achievementsController =
+    makeAchievementsController(achievementsService);
+  const achievementsRouter =
+    makeAchievementsRouter(achievementsController);
 
-  // Broadcaster: escucha eventos del emitter y los manda por WebSocket
-  initParkingBroadcaster();
+  initAchievementsListeners(achievementsService);
 
-  // Worker BullMQ: procesa los delayed jobs de no-show
-  const parkingWorker = createParkingWorker({
-    markNoShowForReservation: (id) => parkingSlotsRepo.markNoShowForReservation(id),
-    markCheckoutForReservation: (id) => parkingSlotsRepo.markCheckoutForReservation(id),
-  });
+  const notificationRepo = makeNotificationsRepo(db);
+  const notificationService =
+    makeNotificationsService(notificationRepo);
+  const notificationController =
+    makeNotificationsController(notificationService);
+  const notificationRouter =
+    makeNotificationsRouter(notificationController);
 
-  const reportsRepo = makeReportsRepo(db);
-  const reportsSlotsService = makeReportsService(reportsRepo);
-  const reportsController = makeReportsController(reportsSlotsService);
-  const reportsRouter = makeReportsRouter(reportsController);
+  const authRepo = makeAuthRepo(db);
+  const authService = makeAuthService(authRepo);
+  const authController = makeAuthController(authService);
+  const authRouter = makeAuthRouter(authController);
+
+  const userStatusService = makeUserStatusService();
+
+  const userStatsRepo = makeUserStatsRepo(db);
+  const userStatsService =
+    makeUserStatsService(userStatsRepo);
 
   const teamsRepo = makeTeamsRepo(db);
-  const teamsService = makeTeamsService(teamsRepo, userStatusService);
-  const teamsController = makeTeamsController(teamsService);
-  const teamsRouter = makeTeamsRouter(teamsController);
+  const teamsService = makeTeamsService(
+    teamsRepo,
+    userStatusService,
+  );
+  const teamsController =
+    makeTeamsController(teamsService);
+  const teamsRouter =
+    makeTeamsRouter(teamsController);
+
+  const officeSlotsRepo = makeOfficeSlotsRepo(db);
+
+  const officeSlotsService = makeOfficeSlotsService({
+    repo: officeSlotsRepo,
+    friendshipService,
+    queue: officeQueue,
+    emitter: officeEvents,
+    teamsService,
+  });
+
+  const officeSlotsController =
+    makeOfficeSlotsController(officeSlotsService);
+
+  const officeSlotsRouter =
+    makeOfficeSlotsRouter(officeSlotsController);
+
+  const parkingSlotsRepo =
+    makeParkingSlotsRepo(db);
+
+  const parkingSlotsService =
+    makeParkingSlotsService({
+      repo: parkingSlotsRepo,
+      friendshipService,
+      queue: parkingQueue,
+      emitter: parkingEvents,
+    });
+
+  const parkingSlotsController =
+    makeParkingSlotsController(
+      parkingSlotsService,
+    );
+
+  const parkingSlotsRouter =
+    makeParkingSlotsRouter(
+      parkingSlotsController,
+    );
+
+  initOfficeBroadcaster();
+  initParkingBroadcaster();
+  initTeamBroadcaster();
+  initUserBroadcaster();
+
+  const officeWorker =
+    createOfficeWorker({
+      markNoShowForReservation: (id) =>
+        officeSlotsRepo.markNoShowForReservation(id),
+      markCheckoutForReservation: (id) =>
+        officeSlotsRepo.markCheckoutForReservation(id),
+      getReservableById: (id) =>
+        officeSlotsRepo.getReservableById(id),
+    });
+
+  const parkingWorker =
+    createParkingWorker({
+      markNoShowForReservation: (id) =>
+        parkingSlotsRepo.markNoShowForReservation(id),
+      markCheckoutForReservation: (id) =>
+        parkingSlotsRepo.markCheckoutForReservation(id),
+    });
+
+  const reportsRepo = makeReportsRepo(db);
+  const reportsService =
+    makeReportsService(reportsRepo);
+  const reportsController =
+    makeReportsController(reportsService);
+  const reportsRouter =
+    makeReportsRouter(reportsController);
+
+  const eventsRepo = makeEventsRepo(db);
+  const eventsService =
+    makeEventsService(eventsRepo, userRepo);
+  const eventsController =
+    makeEventsController(eventsService);
+  const eventsRouter =
+    makeEventsRouter(eventsController);
+
+  userStatsService.initListeners();
+  userStatsService.initScheduler();
+
+  const userTimelineService =
+    makeUserTimelineService({
+      officeSlots: officeSlotsService,
+      parkingSlots: parkingSlotsService,
+      events: eventsService,
+      friendship: friendshipService,
+    });
+
+  const userTimelineController =
+    makeUserTimelineController(
+      userTimelineService,
+    );
+
+  const userService = makeUserService(
+    userRepo,
+    roleRepo,
+    friendshipService,
+    achievementsService,
+    userStatusService,
+    userStatsService,
+  );
+
+  const userController =
+    makeUserController(userService);
+
+  const userRouter =
+    makeUserRouter(
+      userController,
+      userTimelineController,
+    );
+
+  const chatController =
+    makeChatController({
+      officeSlots: officeSlotsService,
+      parkingSlots: parkingSlotsService,
+      user: userService,
+    });
+
+  const chatRouter = makeChatRouter(chatController);
 
   return {
     db,
-    authRouter,
     roleRouter,
     userRouter,
+    userService,
+    userStatusService,
     notificationRouter,
+    authRouter,
     friendshipRouter,
     achievementsRouter,
     achievementsService,
     officeSlotsRouter,
-    reservablesRouter,
-    reservationsRouter,
-    eventsRouter,
-    workGroupsRouter,
+    officeSlotsRepo,
+    officeWorker,
+    teamsRouter,
+    teamsService,
     parkingSlotsRouter,
     parkingSlotsRepo,
     parkingWorker,
     reportsRouter,
-    teamsRouter,
-    userService,
-    teamsService,
-    userStatusService,
+    eventsRouter,
+    chatRouter,
     fakeAuthenticate,
   };
 }
