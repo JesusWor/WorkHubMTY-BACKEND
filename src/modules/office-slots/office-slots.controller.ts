@@ -118,6 +118,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
         await service.deleteReservable(parsed.data.id);
         GlobalResponse.ok(res, `Slot ${parsed.data.id} eliminado`);
     };
+
     const getReservationsForSlot = async (req: Request, res: Response): Promise<void> => {
         const parsedParams = ReservationIdParamSchema.safeParse(req.params);
 
@@ -148,6 +149,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
                 endTime: parsedBody.data.end_time,
             },
             parsedQuery.data.detail,
+            parsedQuery.data.showOnlyActiveReservations
         );
 
         GlobalResponse.okWithData(res, reservations);
