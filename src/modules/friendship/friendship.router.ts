@@ -19,7 +19,7 @@ export function makeFriendshipRouter(controller: FriendshipController): Router {
     router.post("/requests", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.createRequest));
     router.post("/requests/received", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.acceptRequest));
     router.delete("/requests/sent/:userId", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.cancelRequest));
-    router.delete("/requests/received", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.rejectRequest));
+    router.delete("/requests/received/:userId", authenticate, authorize({ allow: [Roles.ADMIN, Roles.USER] }), asyncHandler(controller.rejectRequest));
 
     return router;
 }
