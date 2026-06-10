@@ -638,9 +638,6 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
                 };
             }),
         );
-        console.log(result);
-        console.log('PARTICIPANTES');
-        result.forEach((r) => console.log(r.participants));
         return result;
     };
 
