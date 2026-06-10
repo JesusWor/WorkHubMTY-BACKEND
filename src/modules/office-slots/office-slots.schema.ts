@@ -85,6 +85,25 @@ export type UpdateReservable = z.infer<typeof UpdateReservableSchema>;
 
 // Reservation
 
+
+export const UserReservationScopeSchema = z
+    .enum(['without_invites', 'all', 'invites_only'])
+    .default('all');
+
+export type UserReservationScope = z.infer<typeof UserReservationScopeSchema>;
+
+export type ReservationRangeFilter = {
+    startTime?: string;
+    endTime?: string;
+    scope?: UserReservationScope;
+};
+
+export const MyReservationsQuerySchema = z.object({
+    scope: z.enum(['without_invites', 'all', 'invites_only'])
+    .optional()
+    .default('all')
+})
+
 export const ReservationCategorySchema = z.enum(['RESERVATION', 'MEETING']);
 export type ReservationCategory = z.infer<typeof ReservationCategorySchema>;
 

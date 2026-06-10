@@ -16,6 +16,7 @@ import {
     ReservationIdBodySchema,
     ReservationDetailQuerySchema,
     SlotCodeParamSchema,
+    MyReservationsQuerySchema,
 } from './office-slots.schema.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
@@ -180,7 +181,14 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
 
     const getMyReservations = async (req: Request, res: Response): Promise<void> => {
         const caller = req.user as JwtPayload;
-        const reservations = await service.getMyReservations(caller);
+        const parsedQuery = MyReservationsQuerySchema.safeParse(req.query)
+
+        if(!parsedQuery.success){
+            GlobalResponse.zodError(res, parsedQuery.error)
+            return;
+        }
+
+        const reservations = await service.getMyReservations(caller, parsedQuery.data?.scope);
         GlobalResponse.okWithData(res, reservations);
     };
 

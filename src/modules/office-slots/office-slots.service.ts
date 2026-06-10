@@ -21,6 +21,8 @@ import {
     ReservationSummary,
     GetReservationsForSlotFilters,
     EarlyCheckinResponse,
+    UserReservationScope,
+    ReservationRangeFilter,
 } from './office-slots.schema.js';
 import {
     BadRequestError,
@@ -109,11 +111,6 @@ function maskParticipants(
     return participants.map((p) => (friendSet.has(p.user_id) ? p : maskParticipant(p, false)));
 }
 
-export type ReservationRangeFilter = {
-    startTime?: string;
-    endTime?: string;
-};
-
 export type OfficeSlotsServiceDeps = {
     repo: OfficeSlotsRepo;
     friendshipService: FriendshipService;
@@ -135,7 +132,7 @@ export type OfficeSlotsService = {
         slotId: number,
         filters: GetReservationsForSlotFilters,
         detail: boolean,
-        showInactiveReservations:boolean
+        showInactiveReservations: boolean,
     ) => Promise<Reservation[] | ReservationSummary[]>;
 
     // Blocks
@@ -148,10 +145,14 @@ export type OfficeSlotsService = {
         caller: JwtPayload,
     ) => Promise<ListReservationsPage>;
     getReservationDetail: (id: number, caller: JwtPayload) => Promise<ReservationWithParticipants>;
-    getMyReservations: (caller: JwtPayload) => Promise<ReservationWithParticipants[]>;
+    getMyReservations: (
+        caller: JwtPayload,
+        scope: UserReservationScope,
+    ) => Promise<ReservationWithParticipants[]>;
     getUserReservations: (
         userId: string,
         caller: JwtPayload,
+        scope: UserReservationScope,
     ) => Promise<ReservationWithParticipants[]>;
 
     createReservationBatch: (
@@ -192,10 +193,7 @@ export type OfficeSlotsService = {
         reservations: ReservationWithParticipants[];
     }>;
 
-    slotCheckin: (
-        slotCode: string,
-        caller: JwtPayload,
-    ) => Promise<{ reservationId: number }>;
+    slotCheckin: (slotCode: string, caller: JwtPayload) => Promise<{ reservationId: number }>;
 };
 
 export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlotsService {
@@ -258,13 +256,13 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         if (!deleted) throw new NotFoundError(`El slot ${id} no existe`);
         emitter.emit('office.slot.deleted', id);
     };
+
     const getReservationsForSlot = async (
         slotId: number,
         filters: GetReservationsForSlotFilters,
-        detail:boolean,
-        showInactiveReservations:boolean
+        detail: boolean,
+        showInactiveReservations: boolean,
     ) => {
-
         if (detail) {
             return repo.getReservationDetailsBySlot(slotId, showInactiveReservations, filters);
         }
@@ -302,15 +300,17 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
 
     const getMyReservations = async (
         caller: JwtPayload,
+        scope: UserReservationScope = 'all',
     ): Promise<ReservationWithParticipants[]> => {
-        return repo.getReservationsByUser(caller.eId);
+        return repo.getReservationsByUser(caller.eId, scope);
     };
 
     const getUserReservations = async (
         userId: string,
         caller: JwtPayload,
+        scope: UserReservationScope = 'all',
     ): Promise<ReservationWithParticipants[]> => {
-        const reservations = await repo.getReservationsByUser(userId);
+        const reservations = await repo.getReservationsByUser(userId, scope);
         const friendSet = await getFriendSet(caller.eId);
         return Promise.all(reservations.map((r) => applyFriendMask(r, friendSet)));
     };
@@ -578,12 +578,6 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         return updated;
     };
 
-    // Vista por usuario
-    type ReservationRangeFilter = {
-        startTime?: string;
-        endTime?: string;
-    };
-
     const getUserReservationsView = async (
         targetUserId: string,
         caller: JwtPayload,
@@ -592,14 +586,17 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         user_id: string;
         reservations: ReservationWithParticipants[];
     }> => {
+        const scope = range?.scope ?? 'all';
+
         const reservations =
             range?.startTime && range?.endTime
                 ? await repo.getReservationsByUserInRange(
                       targetUserId,
                       range.startTime,
                       range.endTime,
+                      scope,
                   )
-                : await repo.getReservationsByUser(targetUserId);
+                : await repo.getReservationsByUser(targetUserId, scope);
 
         const friendSet = await getFriendSet(caller.eId);
 
@@ -610,7 +607,6 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
             reservations: masked,
         };
     };
-
     // Block
 
     const createBlockBatch = async (data: BlockBatch): Promise<ReservationWithParticipants[]> => {
@@ -659,10 +655,7 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         const reservable = await repo.getReservableByCode(slotCode);
         if (!reservable) throw new NotFoundError(`El espacio '${slotCode}' no existe`);
 
-        const candidates = await repo.getTodayReservationsByUserAndSlot(
-            caller.eId,
-            reservable.id,
-        );
+        const candidates = await repo.getTodayReservationsByUserAndSlot(caller.eId, reservable.id);
 
         if (candidates.length === 0) {
             throw new NotFoundError(

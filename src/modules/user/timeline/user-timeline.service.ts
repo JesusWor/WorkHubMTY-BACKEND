@@ -2,7 +2,11 @@ import { OfficeSlotsService } from '../../office-slots/office-slots.service.js';
 import { ParkingSlotsService } from '../../parking-slots/parking-slots.service.js';
 import { EventsService } from '../../guest-events/guest-events.service.js';
 import { FriendshipService } from '../../friendship/friendship.service.js';
-import { ReservationWithParticipants } from '../../office-slots/office-slots.schema.js';
+import {
+    ReservationRangeFilter,
+    ReservationWithParticipants,
+    UserReservationScope,
+} from '../../office-slots/office-slots.schema.js';
 import { ReservationDetailResponse } from '../../parking-slots/parking-slots.schema.js';
 import { EventWithCreator } from '../../guest-events/guest-events.schema.js';
 import { JwtPayload } from '../../../middleware/index.js';
@@ -49,9 +53,9 @@ function validateDateOrder(from: string, to: string): void {
         throw new BadRequestError("'from' must be earlier than or equal to 'to'");
     }
 }
-
 const toDatetimeStart = (date: string) => `${date} 00:00:00`;
 const toDatetimeEnd = (date: string) => `${date} 23:59:59`;
+
 export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTimelineService {
     const { officeSlots, parkingSlots, events, friendship } = deps;
 
@@ -59,10 +63,7 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
         eId: string,
         caller: JwtPayload,
         query: UserTimelineQuery,
-        range: {
-            startTime: string;
-            endTime: string;
-        },
+        range: ReservationRangeFilter,
         sharedEvents?: EventWithCreator[],
     ): Promise<UserTimelineEntry> {
         const entry: UserTimelineEntry = { eId };
@@ -75,17 +76,21 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
                     .getUserReservationsView(eId, caller, {
                         startTime: range.startTime,
                         endTime: range.endTime,
+                        scope: "without_invites",
                     })
                     .then(({ reservations }) => {
                         const categories = query.officeCategories;
 
-                        entry.officeReservations =
-                            (categories && categories.length > 0
+                        entry.officeReservations = (
+                            categories && categories.length > 0
                                 ? reservations.filter((r) => categories.includes(r.category as any))
-                                : reservations)
-                                .filter(r => r.attendance_status !== "CANCELED" && r.attendance_status !== "NO_SHOW" && r.attendance_status !== "CHECKED_OUT")
-                                
-                            
+                                : reservations
+                        ).filter(
+                            (r) =>
+                                r.attendance_status !== 'CANCELED' &&
+                                r.attendance_status !== 'NO_SHOW' &&
+                                r.attendance_status !== 'CHECKED_OUT',
+                        );
                     }),
             );
         }

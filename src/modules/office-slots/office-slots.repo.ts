@@ -14,6 +14,7 @@ import {
     AvailableReservablesQuery,
     CreateReservable,
     ReservationSummary,
+    UserReservationScope,
 } from './office-slots.schema.js';
 
 type ReservationRow = Omit<Reservation, 'lifecycle_status' | 'reservable' | 'participants'>;
@@ -69,11 +70,15 @@ export type OfficeSlotsRepo = {
         callerEId: string,
         friendIds: string[],
     ) => Promise<ListReservationsPage>;
-    getReservationsByUser: (userId: string) => Promise<ReservationWithParticipants[]>;
+    getReservationsByUser: (
+        userId: string,
+        scope: UserReservationScope,
+    ) => Promise<ReservationWithParticipants[]>;
     getReservationsByUserInRange: (
         userId: string,
         startTime: string,
         endTime: string,
+        scope: UserReservationScope,
     ) => Promise<ReservationWithParticipants[]>;
 
     createReservationBatch: (
@@ -165,6 +170,25 @@ function buildReservationDateFilter(filters?: GetReservationsForSlotFilters): Sq
         params: [],
     };
 }
+
+const getUserReservationScopeCondition = (
+    scope: UserReservationScope = 'without_invites',
+): string => {
+    switch (scope) {
+        case 'all':
+            return '';
+
+        case 'without_invites':
+            return "AND rp.attendance_status <> 'INVITED'";
+
+        case 'invites_only':
+            return "AND rp.attendance_status = 'INVITED'";
+
+        default:
+            return "AND rp.attendance_status <> 'INVITED'";
+    }
+};
+
 export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     // Reservables
 
@@ -394,7 +418,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             JOIN floors f ON f.id = res.floor_id
             WHERE r.reservable_id = ?
                 AND r.attendance_status <> 'CANCELED'
-                ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ""}
+                ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ''}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
@@ -418,7 +442,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             FROM reservations r
             WHERE r.reservable_id = ?
             AND r.attendance_status <> 'CANCELED'
-            ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')": ""}
+            ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ''}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
@@ -548,47 +572,24 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
         return { items, nextCursor };
     };
-
     const getReservationsByUser = async (
         userId: string,
+        scope: UserReservationScope = 'without_invites',
     ): Promise<ReservationWithParticipants[]> => {
+        const scopeCondition = getUserReservationScopeCondition(scope);
         const { rows } = await db.query(
             `SELECT ${RESERVATION_FIELDS}
-             FROM reservations r
-             INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
-             WHERE rp.user_id = ?
-             ORDER BY r.start_time DESC`,
+                FROM reservations r
+                INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
+                WHERE rp.user_id = ?
+                ${scopeCondition}
+                ORDER BY r.start_time DESC`,
             [userId],
         );
-        const reservations = (rows as ReservationRow[]).map(hydrateReservation);
-
-        return Promise.all(
-            reservations.map(async (res) => {
-                const reservable = (await getReservableById(res.reservable_id))!;
-                const participants = await getParticipantsByReservation(res.id);
-                return { ...res, reservable, participants };
-            }),
-        );
-    };
-    const getReservationsByUserInRange = async (
-        userId: string,
-        startTime: string,
-        endTime: string,
-    ): Promise<ReservationWithParticipants[]> => {
-        const { rows } = await db.query(
-            `SELECT ${RESERVATION_FIELDS}
-            FROM reservations r
-            INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
-            WHERE rp.user_id = ?
-                AND r.start_time < ?
-                AND r.end_time > ?
-            ORDER BY r.start_time ASC`,
-            [userId, endTime, startTime],
-        );
 
         const reservations = (rows as ReservationRow[]).map(hydrateReservation);
 
-        return Promise.all(
+        const result = await Promise.all(
             reservations.map(async (res) => {
                 const reservable = (await getReservableById(res.reservable_id))!;
                 const participants = await getParticipantsByReservation(res.id);
@@ -600,6 +601,47 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
                 };
             }),
         );
+
+        return result;
+    };
+    const getReservationsByUserInRange = async (
+        userId: string,
+        startTime: string,
+        endTime: string,
+        scope: UserReservationScope = 'without_invites',
+    ): Promise<ReservationWithParticipants[]> => {
+        const scopeCondition = getUserReservationScopeCondition(scope);
+
+        const { rows } = await db.query(
+            `SELECT ${RESERVATION_FIELDS}
+                FROM reservations r
+                INNER JOIN reservation_participants rp ON rp.reservations_id = r.id
+                WHERE rp.user_id = ?
+                AND r.start_time < ?
+                AND r.end_time > ?
+                ${scopeCondition}
+                ORDER BY r.start_time ASC`,
+            [userId, endTime, startTime],
+        );
+
+        const reservations = (rows as ReservationRow[]).map(hydrateReservation);
+
+        const result = await Promise.all(
+            reservations.map(async (res) => {
+                const reservable = (await getReservableById(res.reservable_id))!;
+                const participants = await getParticipantsByReservation(res.id);
+
+                return {
+                    ...res,
+                    reservable,
+                    participants,
+                };
+            }),
+        );
+        console.log(result);
+        console.log('PARTICIPANTES');
+        result.forEach((r) => console.log(r.participants));
+        return result;
     };
 
     const createReservationBatch = async (
@@ -876,7 +918,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         return rows as Array<Pick<Reservation, 'id' | 'end_time'>>;
     };
 
-        // CHECAR ESTA FUNCION. POR QUE SIEMPRE REGRESA AVAILABLE ?????
+    // CHECAR ESTA FUNCION. POR QUE SIEMPRE REGRESA AVAILABLE ?????
     const getReservableByCode = async (code: string): Promise<Reservable | null> => {
         const { rows } = await db.query(
             `SELECT
