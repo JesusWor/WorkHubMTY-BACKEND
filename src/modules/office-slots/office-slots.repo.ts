@@ -417,6 +417,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
                 r.end_time,
                 r.attendance_status,
                 res.name AS reservable_name,
+                res.code AS reservable_code,
                 res.floor_id,
                 f.name AS floor_name
             FROM reservations r

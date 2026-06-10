@@ -129,6 +129,7 @@ export type Reservation = z.infer<typeof ReservationSchema>;
 export type ReservationSummary = Pick<Reservation, 'id' | 'start_time' | 'end_time' | 'attendance_status'> & {
     reservable_id: number;
     reservable_name: string;
+    reservable_code:string;
     floor_id: number;
     floor_name: string;
 };
