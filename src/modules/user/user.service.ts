@@ -215,11 +215,9 @@ export function makeUserService(
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const roles = await roleRepo.getByName(role);
-        console.log(roles);
 
         if (!roles || roles.length === 0) {
             const createdRole = await roleRepo.create({ name: role });
-            console.log(createdRole);
             if (!createdRole) throw new InternalError("Could not create role");
             return await repo.TEMPORARY_CREATE(eId, name, email, hashedPassword, createdRole.id, title);
         }
