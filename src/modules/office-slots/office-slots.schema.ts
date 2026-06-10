@@ -288,21 +288,48 @@ export type GetReservationsForSlotFilters = {
   endTime?: string;
 };
 
-export const AvailableReservablesQuerySchema = z.object({
+function normalizeArrayParam(value: unknown) {
+  if (value === undefined || value === null) return undefined;
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+}
+export const AvailableReservablesQuerySchema = z
+  .object({
     floorId: z.coerce.number().int().optional(),
     startTime: z.coerce.date().optional(),
     endTime: z.coerce.date().optional(),
     minCapacity: z.coerce.number().int().min(1).optional(),
     maxCapacity: z.coerce.number().int().min(1).optional(),
     query: z.string().optional(),
-    daysToApply: z.array(z.coerce.date()).optional(),
+
+    daysToApply: z.preprocess(
+      normalizeArrayParam,
+      z.array(z.coerce.date()).optional(),
+    ),
+
     userId: z.string().optional(),
-}).refine(
+  })
+  .refine(
     (d) => {
-        if (d.startTime && d.endTime) return d.endTime > d.startTime;
-        return true;
-    }, { message: 'endTime debe ser posterior a startTime', path: ['endTime'] },
-);
+      if (d.startTime && d.endTime) return d.endTime > d.startTime;
+      return true;
+    },
+    {
+      message: "endTime debe ser posterior a startTime",
+      path: ["endTime"],
+    },
+  );
 
 export type AvailableReservablesQuery = z.infer<typeof AvailableReservablesQuerySchema>;
 
