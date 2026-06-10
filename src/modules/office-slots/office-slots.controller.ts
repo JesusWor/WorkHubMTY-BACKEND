@@ -17,6 +17,7 @@ import {
     ReservationDetailQuerySchema,
     SlotCodeParamSchema,
     MyReservationsQuerySchema,
+    getAllReservablesQuerySchema,
 } from './office-slots.schema.js';
 import { JwtPayload } from '../../shared/schemas/auth.schema.js';
 
@@ -56,7 +57,12 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
     // Reservables
 
     const getAllReservables = async (_req: Request, res: Response): Promise<void> => {
-        const slots = await service.getAllReservables();
+        const parsed = getAllReservablesQuerySchema.safeParse(_req.query);
+        if (!parsed.success) {
+            GlobalResponse.zodError(res, parsed.error);
+            return;
+        }
+        const slots = await service.getAllReservables(parsed.data.floor);
         GlobalResponse.okWithData(res, slots);
     };
 
@@ -150,7 +156,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
                 endTime: parsedBody.data.end_time,
             },
             parsedQuery.data.detail,
-            parsedQuery.data.showInactiveReservations
+            parsedQuery.data.showInactiveReservations,
         );
 
         GlobalResponse.okWithData(res, reservations);
@@ -181,10 +187,10 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
 
     const getMyReservations = async (req: Request, res: Response): Promise<void> => {
         const caller = req.user as JwtPayload;
-        const parsedQuery = MyReservationsQuerySchema.safeParse(req.query)
+        const parsedQuery = MyReservationsQuerySchema.safeParse(req.query);
 
-        if(!parsedQuery.success){
-            GlobalResponse.zodError(res, parsedQuery.error)
+        if (!parsedQuery.success) {
+            GlobalResponse.zodError(res, parsedQuery.error);
             return;
         }
 

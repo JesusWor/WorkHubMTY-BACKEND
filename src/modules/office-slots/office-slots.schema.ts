@@ -85,6 +85,9 @@ export type UpdateReservable = z.infer<typeof UpdateReservableSchema>;
 
 // Reservation
 
+export const getAllReservablesQuerySchema = z.object({
+    floor:z.string().optional()
+})
 
 export const UserReservationScopeSchema = z
     .enum(['without_invites', 'all', 'invites_only'])
@@ -325,7 +328,7 @@ function normalizeArrayParam(value: unknown) {
 }
 export const AvailableReservablesQuerySchema = z
   .object({
-    floorId: z.coerce.number().int().optional(),
+    floor: z.coerce.string().optional(),
     startTime: z.coerce.date().optional(),
     endTime: z.coerce.date().optional(),
     minCapacity: z.coerce.number().int().min(1).optional(),

@@ -121,7 +121,7 @@ export type OfficeSlotsServiceDeps = {
 
 export type OfficeSlotsService = {
     // Reservables
-    getAllReservables: () => Promise<Reservable[]>;
+    getAllReservables: (floor?:string) => Promise<Reservable[]>;
     getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
     getReservableById: (id: number, detail?: boolean) => Promise<Reservable>;
     createReservable: (data: CreateReservable) => Promise<Reservable>;
@@ -220,13 +220,15 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
 
     // Reservables
 
-    const getAllReservables = async (): Promise<Reservable[]> => {
-        return repo.getAllReservables();
+    const getAllReservables = async (floor?:string): Promise<Reservable[]> => {
+        console.log(floor)
+        return repo.getAllReservables(floor);
     };
 
     const getAvailableReservables = async (
         query: AvailableReservablesQuery,
     ): Promise<Reservable[]> => {
+        console.log(query)
         return repo.getAvailableReservables(query);
     };
 

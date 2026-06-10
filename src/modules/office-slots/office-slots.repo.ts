@@ -42,7 +42,7 @@ function hydrateReservation(row: ReservationRow): Reservation {
 
 export type OfficeSlotsRepo = {
     // Reservables
-    getAllReservables: () => Promise<Reservable[]>;
+    getAllReservables: (floor?:string) => Promise<Reservable[]>;
     getAvailableReservables: (query: AvailableReservablesQuery) => Promise<Reservable[]>;
     getReservableById: (id: number, detail?: boolean) => Promise<Reservable | null>;
     createReservable: (data: CreateReservable) => Promise<Reservable | null>;
@@ -192,7 +192,10 @@ const getUserReservationScopeCondition = (
 export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     // Reservables
 
-    const getAllReservables = async (): Promise<Reservable[]> => {
+    const getAllReservables = async (floor?:string): Promise<Reservable[]> => {
+
+        const params = floor? [floor]:[];
+        const where = floor? "WHERE f.name = ?" : ""
         const { rows } = await db.query(
             `
         SELECT
@@ -231,9 +234,10 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
 
         FROM reservables r
         JOIN floors f ON f.id = r.floor_id
+        ${where}
         ORDER BY r.id ASC
         `,
-            [],
+            [params],
         );
 
         return rows.map((r) => ({
@@ -248,9 +252,9 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
         const where: string[] = ['1 = 1'];
         const params: unknown[] = [];
 
-        if (filters.floorId !== undefined) {
-            where.push('r.floor_id = ?');
-            params.push(filters.floorId);
+        if (filters.floor !== undefined) {
+            where.push('f.name = ?');
+            params.push(filters.floor);
         }
 
         if (filters.minCapacity !== undefined) {
