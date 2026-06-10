@@ -126,47 +126,47 @@ function broadcastReservationEvent(
 }
 
 export function initOfficeBroadcaster(): void {
-    officeEvents.on("reservation.created", (payload) =>
+    officeEvents.on("office.reservation.created", (payload) =>
         broadcastReservationEvent("reservation.created", payload)
     );
 
-    officeEvents.on("reservation.canceled", (payload) =>
+    officeEvents.on("office.reservation.canceled", (payload) =>
         broadcastReservationEvent("reservation.canceled", payload)
     );
 
-    officeEvents.on("reservation.checkedin", (payload) =>
+    officeEvents.on("office.reservation.checkedin", (payload) =>
         broadcastReservationEvent("reservation.checkedin", payload)
     );
 
-    officeEvents.on("reservation.checkedout", (payload) =>
+    officeEvents.on("office.reservation.checkedout", (payload) =>
         broadcastReservationEvent("reservation.checkedout", payload)
     );
 
-    officeEvents.on("reservation.noshow", (payload) =>
+    officeEvents.on("office.reservation.noshow", (payload) =>
         broadcastReservationEvent("reservation.noshow", payload)
     );
 
-    officeEvents.on("reservation.attendance_updated", (payload) =>
+    officeEvents.on("office.reservation.attendance_updated", (payload) =>
         broadcastReservationEvent("reservation.attendance_updated", payload)
     );
 
-    officeEvents.on("participant.updated", (payload) =>
+    officeEvents.on("office.participant.updated", (payload) =>
         broadcastReservationEvent("participant.updated", payload)
     );
 
-    officeEvents.on("slot.created", (slot) => {
+    officeEvents.on("office.slot.created", (slot) => {
         const msg: OfficeUpdateMessage = { type: "slot.created", payload: slot };
         emitToOfficeRoom(msg);
         emitToAdmin(msg);
     });
 
-    officeEvents.on("slot.updated", (slot) => {
+    officeEvents.on("office.slot.updated", (slot) => {
         const msg: OfficeUpdateMessage = { type: "slot.updated", payload: slot };
         emitToOfficeRoom(msg);
         emitToAdmin(msg);
     });
 
-    officeEvents.on("slot.deleted", (slotId) => {
+    officeEvents.on("office.slot.deleted", (slotId) => {
         const msg: OfficeUpdateMessage = { type: "slot.deleted", payload: { id: slotId } };
         emitToOfficeRoom(msg);
         emitToAdmin(msg);

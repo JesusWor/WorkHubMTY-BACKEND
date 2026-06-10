@@ -50,26 +50,26 @@ function broadcast(msg: ParkingUpdateMessage): void {
 }
 
 export function initParkingBroadcaster(): void {
-    parkingEvents.on("reservation.created", (r) =>
+    parkingEvents.on("parking.reservation.created", (r) =>
         broadcast({ type: "reservation.created", payload: toPublicReservation(r) })
     );
-    parkingEvents.on("reservation.canceled", (r) =>
+    parkingEvents.on("parking.reservation.canceled", (r) =>
         broadcast({ type: "reservation.canceled", payload: toPublicReservation(r) })
     );
-    parkingEvents.on("reservation.attendance_updated", (r) =>
+    parkingEvents.on("parking.reservation.attendance_updated", (r) =>
         broadcast({ type: "reservation.attendance_updated", payload: toPublicReservation(r) })
     );
-    parkingEvents.on("reservation.no_show", (r) =>
+    parkingEvents.on("parking.reservation.noshow", (r) =>
         broadcast({ type: "reservation.no_show", payload: toPublicReservation(r) })
     );
 
-    parkingEvents.on("lot.created", (lot) =>
+    parkingEvents.on("parking.lot.created", (lot) =>
         broadcast({ type: "lot.created", payload: toPublicLot(lot) })
     );
-    parkingEvents.on("lot.updated", (lot) =>
+    parkingEvents.on("parking.lot.updated", (lot) =>
         broadcast({ type: "lot.updated", payload: toPublicLot(lot) })
     );
-    parkingEvents.on("lot.deleted", (id) =>
+    parkingEvents.on("parking.lot.deleted", (id) =>
         broadcast({ type: "lot.deleted", payload: { id } })
     );
 }
