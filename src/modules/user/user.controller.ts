@@ -195,7 +195,8 @@ export function makeUserController(service: UserService): UserController {
             parsed.data.name,
             parsed.data.email,
             parsed.data.password,
-            parsed.data.roleName
+            parsed.data.roleName,
+            parsed.data.title,
         );
         GlobalResponse.okWithData(res, userCreated);
     };
