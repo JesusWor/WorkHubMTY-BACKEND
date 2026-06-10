@@ -123,7 +123,6 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             GlobalResponse.unauthorized(res);
             return;
         }
-        console.log(req.params.userId)
         const parsed = RemoveRelationSchema.safeParse(req.params.userId);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
@@ -141,7 +140,7 @@ export function makeFriendshipController(service: FriendshipService): Friendship
             return;
         }
 
-        const parsed = RemoveRelationSchema.safeParse(req.body);
+        const parsed = RemoveRelationSchema.safeParse(req.params.userId);
         if (!parsed.success) {
             GlobalResponse.zodError(res, parsed.error);
             return;

@@ -12,7 +12,7 @@ export type FriendshipService = {
 
     getReceivedRequests: (eId: string) => Promise<FriendRequest[]>;
     getSentRequests: (eId: string) => Promise<SentFriendRequest[]>;
-    createRequest: (fromUser: string, toUserIds: string[], message?:string | undefined) => Promise<FriendRequests | null>;
+    createRequest: (fromUser: string, toUserIds: string[], message?: string | undefined) => Promise<FriendRequests | null>;
     acceptRequest: (toUser: string, fromUser: string) => Promise<Friendship | null>;
     cancelRequest: (fromUser: string, toUser: string) => Promise<boolean>;
     rejectRequest: (toUser: string, fromUser: string) => Promise<boolean>;
@@ -73,7 +73,7 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
         return await repo.getSentRequests(eId)
     };
 
-    const createRequest = async (fromUser: string, toUserIds: string[], message?:string| undefined): Promise<FriendRequests | null> => {
+    const createRequest = async (fromUser: string, toUserIds: string[], message?: string | undefined): Promise<FriendRequests | null> => {
         if (!fromUser || !toUserIds || toUserIds.length === 0) throw new BadRequestError("Both user ids are required");
         if (toUserIds.includes(fromUser)) throw new BadRequestError("A user cannot send a friend request to themselves");
 
@@ -91,6 +91,9 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
 
         const accepted = await repo.acceptRequest(fromUser, toUser);
         if (!accepted) throw new NotFoundError("Pending friend request not found");
+        accepted.toUserIds = Array.isArray(accepted.toUserIds)
+            ? accepted.toUserIds
+            : [accepted.toUserIds];
 
         const friendship = createFriendship(fromUser, toUser, "REQUEST");
         if (!friendship) throw new ConflictError("Friendship already exists");
@@ -105,6 +108,9 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
 
         const cancelled = await repo.cancelRequest(fromUser, toUser);
         if (!cancelled) throw new NotFoundError("Pending friend request not found");
+        cancelled.toUserIds = Array.isArray(cancelled.toUserIds)
+            ? cancelled.toUserIds
+            : [cancelled.toUserIds];
 
         userEvents.emit("friendRequest.canceled", cancelled);
 
@@ -116,6 +122,9 @@ export function makeFriendshipService(repo: FriendshipRepo): FriendshipService {
 
         const rejected = await repo.rejectRequest(toUser, fromUser);
         if (!rejected) throw new NotFoundError("Pending friend request not found");
+        rejected.toUserIds = Array.isArray(rejected.toUserIds)
+            ? rejected.toUserIds
+            : [rejected.toUserIds];
 
         userEvents.emit("friendRequest.rejected", rejected);
 

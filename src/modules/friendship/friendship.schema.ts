@@ -24,9 +24,9 @@ export const FriendRequestSchema = z.object({
 
 export const SentFriendRequestSchema = z.object({
     id: z.number(),
-    eId:z.string(),
-    name:z.string(),
-    email:z.email(),
+    eId: z.string(),
+    name: z.string(),
+    email: z.email(),
     status: RequestStatusEnum,
     createdAt: z.string(),
     resolvedAt: z.string().nullable(),
