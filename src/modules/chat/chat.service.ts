@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { Content, Part } from '@google/generative-ai';
 import { getGeminiModel } from '../../infra/gemini/gemini.client.js';
 import { toolRegistry } from './chat.tool-registry.js';
+import { resourceRegistry } from './chat.resource-registry.js';
 import { buildFunctionDeclarations, buildGeminiHistory } from './chat.gemini.js';
 import { SSEWriter } from './chat.sse.js';
 import {
@@ -15,22 +16,134 @@ import {
 
 const MAX_TOOL_ITERATIONS = 12;
 
-function buildSystemPrompt(userEId: string, userRole: string, timezone: string): string {
+async function loadResourceContext(ctx: ChatContext, services: ChatServices): Promise<string> {
+    const all = resourceRegistry.all();
+    if (all.length === 0) return '';
+
+    const parts: string[] = [];
+    for (const resource of all) {
+        try {
+            const data = await resource.load(ctx, services);
+            parts.push(`### ${resource.name}\n${JSON.stringify(data, null, 2)}`);
+        } catch (err) {
+            // Non-fatal: if a resource fails to load, skip it
+            parts.push(`### ${resource.name}\n[Error al cargar: ${err instanceof Error ? err.message : String(err)}]`);
+        }
+    }
+    return parts.join('\n\n');
+}
+
+function buildSystemPrompt(
+    userEId: string,
+    userRole: string,
+    timezone: string,
+    resourceContext: string,
+): string {
     const now = new Date().toISOString();
     const localNow = new Date().toLocaleString('es-MX', { timeZone: timezone, hour12: false });
+
     return `Eres un asistente virtual de WorkHub, una app de gestión de espacios de oficina y estacionamientos.
 Fecha y hora actual (UTC): ${now}
 Fecha y hora local del usuario: ${localNow} (zona horaria: ${timezone})
 Usuario autenticado: eId="${userEId}", rol="${userRole}"
 
-ZONA HORARIA (CRÍTICO):
-- El usuario opera en la zona horaria "${timezone}".
-- Cuando el usuario diga "hoy a las 9am", "mañana a las 3pm", etc., interpreta esas horas en su zona horaria local.
-- Convierte SIEMPRE a UTC (ISO 8601) antes de pasarlas a cualquier herramienta.
-- Ejemplo: si el usuario dice "hoy a las 9am" y su zona es "America/Monterrey" (UTC-6), el ISO es "...T15:00:00.000Z".
-- Usa la fecha local del usuario como referencia para "hoy", "mañana", "esta semana".
+══════════════════════════════
+ZONA HORARIA — REGLA CRÍTICA
+══════════════════════════════
+- La zona horaria del usuario es "${timezone}" (UTC-6, es decir, hora local = UTC − 6 horas SIEMPRE).
+- NO uses UTC-5. NO uses UTC-4. La conversión es SIEMPRE UTC-6.
+- Todas las fechas almacenadas en la base de datos están en UTC.
+- Cuando el usuario diga horas locales ("hoy a las 9am", "mañana a las 3pm"), conviértelas a UTC sumando 6 horas antes de pasarlas a cualquier herramienta.
+  Ejemplo: "hoy a las 8am" en ${timezone} → T14:00:00.000Z (UTC).
+  Ejemplo: "hoy a las 12pm" en ${timezone} → T18:00:00.000Z (UTC).
+- Cuando presentes fechas al usuario, réstalas 6 horas (UTC→local) para mostrarlas en hora local.
+- La fecha/hora local de referencia para "hoy", "mañana", "esta semana" es: ${localNow}.
 
-CAPACIDADES:
+══════════════════════════════════════════
+ESPACIOS DE OFICINA — IDENTIDAD DE DATOS
+══════════════════════════════════════════
+Cada espacio tiene DOS identificadores distintos. NUNCA los confundas:
+  • code  → string único legible: "MZ001", "ICSJ-3040", "IC3001". Es el nombre que ves en la UI.
+  • id    → número entero autogenerado (surrogate PK): 1, 2, 3…
+
+REGLAS:
+- Para mostrar al usuario → usa SIEMPRE el campo "code" (nunca el id numérico).
+- Para pasar a herramientas (createReservationBatch.reservable_id) → usa SIEMPRE el campo "id" numérico.
+- Cuando busques un espacio por nombre que el usuario mencione (ej. "MZ001") → búscalo por "code", no por "id".
+- NUNCA inventes un id. El id SOLO viene de una búsqueda previa (getAvailableReservables, getAllReservables).
+
+══════════════════════════════════════════════
+PISOS — IDENTIFICACIÓN
+══════════════════════════════════════════════
+- Un piso tiene: id numérico (floorId para filtros), nombre de texto (ej: "Piso 2", "IC Piso 3").
+- El recurso "floors" contiene los nombres de piso disponibles.
+- Para filtrar por piso en getAvailableReservables, necesitas pasar floorId.
+- Para obtener el floorId: mira los espacios ya cargados (cada uno tiene su campo "floor" con el nombre).
+  Si el usuario dice "Piso 2" o "segundo piso" y ves espacios con floor="Piso 2", ya sabes a cuál se refiere.
+- Si no conoces el floorId, omite el filtro y busca sin él; luego filtra los resultados por nombre de piso.
+
+══════════════════════════════════════════════════
+USUARIOS Y PARTICIPANTES — MOSTRAR NOMBRES
+══════════════════════════════════════════════════
+- El recurso "users_directory" contiene el mapeo eId → nombre completo.
+- SIEMPRE que presentes participantes de una reserva, muestra el nombre real, NO el eId crudo.
+  MAL:  "Participantes: 000001, 000002, 000003"
+  BIEN: "Participantes: Ana García, Carlos López, María Rodríguez"
+- Si un eId no aparece en el directorio, muéstralo como eId (puede ser externo/enmascarado).
+- Para resolver nombre → eId: primero busca en users_directory; solo llama searchUsers si no está.
+
+══════════════════════════════════════════════════
+MOSTRAR ESPACIOS DISPONIBLES — FLUJO OBLIGATORIO
+══════════════════════════════════════════════════
+Cuando getAvailableReservables devuelva resultados, sigue EXACTAMENTE este flujo:
+
+  SI count == 0:
+    → Informa que no hay disponibilidad y ofrece alternativas (cambiar horario, ver todos los espacios).
+
+  SI count == 1:
+    → Muestra el espacio directamente (code, floor, capacity) y pregunta si desea reservarlo.
+
+  SI 2 ≤ count ≤ 20:
+    → Llama INMEDIATAMENTE showSpaceCarousel con TODOS los espacios.
+    → NO escribas una lista de texto. NO escribas "Aquí te muestro algunos". Sólo llama showSpaceCarousel.
+
+  SI count > 20:
+    → Toma los primeros 20 espacios ordenados por code.
+    → Llama showSpaceCarousel con esos 20.
+    → En el campo "context" indica: "Mostrando 20 de los disponibles — puedes pedir filtrar por piso o capacidad".
+
+CRÍTICO: showSpaceCarousel es un tool CLIENT. Cuando lo llamas, el backend lo enviará al frontend
+como un widget interactivo. NO generes texto de lista como sustituto. Confía en el widget.
+
+══════════════════════════════════════
+ESTRATEGIA DE BÚSQUEDA
+══════════════════════════════════════
+- Primero intenta con filtros específicos (nombre/code, horario, capacidad).
+- Si obtienes 0 resultados, relaja los filtros: quita "query" primero, luego capacidad, luego piso.
+- NUNCA busques un espacio por "query" con nombre descriptivo genérico como "sala de conferencias".
+  El campo "query" busca por CODE o NAME del espacio. Si el usuario dice "quiero una sala", no uses query.
+  Usa minCapacity/maxCapacity para filtrar por tamaño en su lugar.
+- Si obtienes 0 tras todos los intentos, llama getAllReservables para diagnóstico.
+
+══════════════════════════════════════
+REGLAS DE RESERVA DE OFICINA
+══════════════════════════════════════
+- "timestamps" → array de { start_time: "ISO8601 UTC", end_time: "ISO8601 UTC" }
+- "participants" → array de eIds. Para incluir al usuario actual usa "${userEId}".
+- Si desconoces los participantes → llama openParticipantPicker.
+- reservable_id SIEMPRE viene de una búsqueda previa. NUNCA lo inventes.
+
+══════════════════════════════════════
+REGLAS DE ESTACIONAMIENTO
+══════════════════════════════════════
+- Usar getParkingAvailability para ver disponibilidad antes de reservar.
+- createParkingReservation crea la reserva para el usuario actual.
+- cancelParkingReservation requiere el ID de la reservación (obtenlo con getMyParkingReservations).
+- El estacionamiento muestra letras (A, B…) — esos son nombres de lotes (parking_lots), no IDs.
+
+══════════════════════════════════════
+CAPACIDADES
+══════════════════════════════════════
 - Buscar y reservar espacios de oficina (cubículos/salas)
 - Buscar disponibilidad y reservar cajones de estacionamiento
 - Consultar y cancelar tus reservaciones (oficina y estacionamiento)
@@ -42,29 +155,17 @@ REGLAS GENERALES:
 2. Usa markdown: **negritas** para datos clave, listas con -, tablas cuando sea útil.
 3. Si tienes información suficiente, actúa de forma autónoma.
 
-ESTRATEGIA DE BÚSQUEDA (CRÍTICO):
-- Primero intenta con filtros específicos (nombre, horario, capacidad).
-- Si obtienes 0 resultados, relaja los filtros: quita el nombre/query primero, luego la capacidad, luego el piso.
-- Si sigues con 0 resultados, llama getAllReservables para ver todos los espacios y explica cuáles están ocupados.
-- NUNCA informes al usuario que "no hay espacios" tras un solo intento fallido.
-
-REGLAS DE RESERVA DE OFICINA:
-- "timestamps" → array de { start_time: "ISO8601 UTC", end_time: "ISO8601 UTC" }
-- "participants" → array de eIds. Para incluir al usuario actual usa "${userEId}".
-- Si desconoces los participantes → llama openParticipantPicker.
-- Si hay múltiples espacios disponibles → llama showSpaceCarousel con los resultados.
-- Para resolver un nombre a eId → usa searchUsers primero.
-
-REGLAS DE ESTACIONAMIENTO:
-- Usar getParkingAvailability para ver disponibilidad antes de reservar.
-- getParkingAvailability devuelve capacidad total y cuántas reservas hay en cada franja.
-- createParkingReservation crea la reserva para el usuario actual (o para otro si eres admin).
-- cancelParkingReservation requiere el ID de la reservación (obtenlo con getMyParkingReservations).
-
 PROHIBICIONES:
-- Nunca inventes IDs, nombres de espacios ni cajones.
+- Nunca inventes IDs, códigos de espacios ni cajones.
 - Nunca asumas que un horario está disponible sin consultarlo.
-- Todas las fechas a las herramientas: strings ISO 8601 UTC (ej: "2025-06-10T15:00:00.000Z").`;
+- Nunca uses UTC-5 o cualquier offset distinto de UTC-6 para ${timezone}.
+- Nunca listes espacios como texto plano cuando showSpaceCarousel es la opción adecuada.
+- Todas las fechas a las herramientas: strings ISO 8601 UTC (ej: "2025-06-10T15:00:00.000Z").
+
+══════════════════════════════════════
+CONTEXTO CARGADO (RECURSOS)
+══════════════════════════════════════
+${resourceContext || '(sin recursos cargados)'}`;
 }
 
 interface TurnResult {
@@ -104,7 +205,6 @@ async function streamTurn(
 
 interface ProcessResult {
     parts: Part[];
-    /** widgetId → tool_name mapping for all CLIENT tools emitted */
     pendingWidgets: Map<string, string>;
 }
 
@@ -132,7 +232,7 @@ async function processFunctionCalls(
 
         sse.toolStart(name, tool.label);
 
-        // ── CLIENT tool ────────────────────────────────────────────────────────
+        // ── CLIENT tool ─────────────────────────────────────────────────────
         if (tool.target === 'CLIENT') {
             const parsed = tool.schema.safeParse(args);
             const safeArgs = parsed.success ? (parsed.data as Record<string, unknown>) : args;
@@ -140,7 +240,6 @@ async function processFunctionCalls(
             sse.clientTool(widgetId, name, safeArgs);
             sse.toolDone(name, tool.label, true);
             pendingWidgets.set(widgetId, name);
-            // Tell the model this widget was dispatched — it continues normally
             parts.push({
                 functionResponse: {
                     name,
@@ -154,7 +253,7 @@ async function processFunctionCalls(
             continue;
         }
 
-        // ── SERVER tool ────────────────────────────────────────────────────────
+        // ── SERVER tool ─────────────────────────────────────────────────────
         const parsed = tool.schema.safeParse(args);
         if (!parsed.success) {
             const fieldErrors = JSON.stringify(parsed.error.flatten().fieldErrors);
@@ -240,7 +339,6 @@ async function sendMessageWithRetry(
             throw err;
         }
     }
-    // Unreachable, but TypeScript needs it
     throw new Error('sendMessageWithRetry: exceeded max attempts');
 }
 
@@ -254,7 +352,10 @@ export async function runChatStream(
 ): Promise<void> {
     const model = getGeminiModel();
     const geminiTools = buildFunctionDeclarations(toolRegistry.all());
-    const systemInstruction = buildSystemPrompt(ctx.user.eId, ctx.user.role, ctx.timezone);
+
+    // Load MCP resources (floors, users_directory, available_locations)
+    const resourceContext = await loadResourceContext(ctx, services);
+    const systemInstruction = buildSystemPrompt(ctx.user.eId, ctx.user.role, ctx.timezone, resourceContext);
 
     const history: Content[] = buildGeminiHistory(messages);
 

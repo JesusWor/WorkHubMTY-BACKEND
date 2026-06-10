@@ -70,6 +70,7 @@ export const ReservableSchema = z.object({
     name: z.string().max(50).nullable(),
     capacity: z.number().int().min(1),
     floor: z.string(),
+    floor_id: z.number().int(),
     status:z.enum(['available', 'occupied', 'soon', 'blocked']),
     is_blocked: z.boolean(),
 });
