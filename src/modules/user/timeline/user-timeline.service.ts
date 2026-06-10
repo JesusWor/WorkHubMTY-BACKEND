@@ -16,7 +16,6 @@ export type UserTimelineEntry = {
     events?: EventWithCreator[];
 };
 
-
 export type UserTimelineResponse = {
     from: string;
     to: string;
@@ -81,27 +80,28 @@ export function makeUserTimelineService(deps: UserTimelineServiceDeps): UserTime
                         const categories = query.officeCategories;
 
                         entry.officeReservations =
-                            categories && categories.length > 0
-                                ? reservations.filter((r) =>
-                                    categories.includes(r.category as any),
-                                )
-                                : reservations;
+                            (categories && categories.length > 0
+                                ? reservations.filter((r) => categories.includes(r.category as any))
+                                : reservations)
+                                .filter(r => r.attendance_status !== "CANCELED" && r.attendance_status !== "NO_SHOW" && r.attendance_status !== "CHECKED_OUT")
+                                
+                            
                     }),
             );
         }
 
-if (query.includeParkingReservations) {
-    tasks.push(
-        parkingSlots
-            .getUserReservations(eId, {
-                startTime: range.startTime,
-                endTime: range.endTime,
-            })
-            .then((reservations) => {
-                entry.parkingReservations = reservations;
-            }),
-    );
-}
+        if (query.includeParkingReservations) {
+            tasks.push(
+                parkingSlots
+                    .getUserReservations(eId, {
+                        startTime: range.startTime,
+                        endTime: range.endTime,
+                    })
+                    .then((reservations) => {
+                        entry.parkingReservations = reservations;
+                    }),
+            );
+        }
 
         if (query.includeEvents) {
             entry.events = sharedEvents ?? [];
@@ -138,13 +138,7 @@ if (query.includeParkingReservations) {
             sharedEvents = page.items;
         }
 
-        const userEntry = await buildEntry(
-            eId,
-            caller,
-            query,
-            range,
-            sharedEvents,
-        );
+        const userEntry = await buildEntry(eId, caller, query, range, sharedEvents);
 
         const response: UserTimelineResponse = {
             from: query.from,
@@ -152,8 +146,7 @@ if (query.includeParkingReservations) {
             user: userEntry,
         };
 
-        const shouldIncludePeers =
-            query.includeFriends || query.includeEIds.length > 0;
+        const shouldIncludePeers = query.includeFriends || query.includeEIds.length > 0;
 
         if (shouldIncludePeers) {
             const friendIds = await friendship.getFriendIds(eId);
@@ -172,13 +165,7 @@ if (query.includeParkingReservations) {
             if (peerSet.size > 0) {
                 response.friends = await Promise.all(
                     [...peerSet].map((friendEId) =>
-                        buildEntry(
-                            friendEId,
-                            caller,
-                            query,
-                            range,
-                            sharedEvents,
-                        ),
+                        buildEntry(friendEId, caller, query, range, sharedEvents),
                     ),
                 );
             } else {

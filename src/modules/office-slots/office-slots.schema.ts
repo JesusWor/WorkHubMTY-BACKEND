@@ -238,7 +238,7 @@ export const ReservationIdParamSchema = z.object({
 
 export const ReservationDetailQuerySchema = z.object({
   detail: z.coerce.boolean().optional().default(false),
-  showOnlyActiveReservations: z.coerce.boolean().optional().default(false)
+  showInactiveReservations: z.coerce.boolean().optional().default(false)
 });
 
 export const ReservationIdBodySchema = z

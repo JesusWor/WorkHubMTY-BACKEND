@@ -149,7 +149,7 @@ export function makeOfficeSlotsController(service: OfficeSlotsService): OfficeSl
                 endTime: parsedBody.data.end_time,
             },
             parsedQuery.data.detail,
-            parsedQuery.data.showOnlyActiveReservations
+            parsedQuery.data.showInactiveReservations
         );
 
         GlobalResponse.okWithData(res, reservations);

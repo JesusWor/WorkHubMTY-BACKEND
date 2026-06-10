@@ -135,7 +135,7 @@ export type OfficeSlotsService = {
         slotId: number,
         filters: GetReservationsForSlotFilters,
         detail: boolean,
-        showOnlyActiveReservations:boolean
+        showInactiveReservations:boolean
     ) => Promise<Reservation[] | ReservationSummary[]>;
 
     // Blocks
@@ -262,14 +262,14 @@ export function makeOfficeSlotsService(deps: OfficeSlotsServiceDeps): OfficeSlot
         slotId: number,
         filters: GetReservationsForSlotFilters,
         detail:boolean,
-        showOnlyActiveReservations:boolean
+        showInactiveReservations:boolean
     ) => {
 
         if (detail) {
-            return repo.getReservationDetailsBySlot(slotId, showOnlyActiveReservations, filters);
+            return repo.getReservationDetailsBySlot(slotId, showInactiveReservations, filters);
         }
 
-        return repo.getReservationSummariesBySlot(slotId, showOnlyActiveReservations, filters);
+        return repo.getReservationSummariesBySlot(slotId, showInactiveReservations, filters);
     };
 
     // Reservations

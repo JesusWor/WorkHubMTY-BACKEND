@@ -52,13 +52,13 @@ export type OfficeSlotsRepo = {
     deleteReservable: (id: number) => Promise<boolean>;
     getReservationSummariesBySlot: (
         slotId: number,
-        showOnlyActiveReservations: boolean,
+        showInactiveReservations: boolean,
         filters?: GetReservationsForSlotFilters,
     ) => Promise<ReservationSummary[]>;
 
     getReservationDetailsBySlot: (
         slotId: number,
-        showOnlyActiveReservations: boolean,
+        showInactiveReservations: boolean,
         filters?: GetReservationsForSlotFilters,
     ) => Promise<Reservation[]>;
     // Reservations
@@ -371,7 +371,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     };
     const getReservationSummariesBySlot = async (
         slotId: number,
-        showOnlyActiveReservations: boolean,
+        showInactiveReservations: boolean,
         filters?: GetReservationsForSlotFilters,
     ): Promise<ReservationSummary[]> => {
         const dateFilter = buildReservationDateFilter(filters);
@@ -394,7 +394,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             JOIN floors f ON f.id = res.floor_id
             WHERE r.reservable_id = ?
                 AND r.attendance_status <> 'CANCELED'
-                ${showOnlyActiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ""}
+                ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ""}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
@@ -405,7 +405,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
     };
     const getReservationDetailsBySlot = async (
         slotId: number,
-        showOnlyActiveReservations: boolean,
+        showInactiveReservations: boolean,
         filters?: GetReservationsForSlotFilters,
     ): Promise<Reservation[]> => {
         const dateFilter = buildReservationDateFilter(filters);
@@ -418,7 +418,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             FROM reservations r
             WHERE r.reservable_id = ?
             AND r.attendance_status <> 'CANCELED'
-            ${showOnlyActiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')": ""}
+            ${!showInactiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')": ""}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
