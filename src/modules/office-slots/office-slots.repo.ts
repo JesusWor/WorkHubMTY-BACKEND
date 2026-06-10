@@ -394,7 +394,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             JOIN floors f ON f.id = res.floor_id
             WHERE r.reservable_id = ?
                 AND r.attendance_status <> 'CANCELED'
-                ${showOnlyActiveReservations && "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')"}
+                ${showOnlyActiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')" : ""}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
@@ -418,7 +418,7 @@ export function makeOfficeSlotsRepo(db: Db): OfficeSlotsRepo {
             FROM reservations r
             WHERE r.reservable_id = ?
             AND r.attendance_status <> 'CANCELED'
-            ${showOnlyActiveReservations && "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')"}
+            ${showOnlyActiveReservations ? "AND (r.attendance_status = 'NOT_ARRIVED' OR r.attendance_status = 'CHECKED_IN')": ""}
             ${dateFilter.sql}
             ORDER BY r.start_time ASC
             `,
