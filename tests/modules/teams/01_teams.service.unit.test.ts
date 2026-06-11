@@ -13,6 +13,7 @@ function makeUser(overrides: Partial<User> = {}): User {
         name: 'Usuario',
         email: 'usuario@example.com',
         roleName: 'USER',
+        title: null,
         status: 'offline',
         ...overrides,
     };
@@ -82,6 +83,22 @@ beforeEach(() => {
 });
 
 describe('TeamsService.updateTeam', () => {
+    it('enriquece getTeamById con status de usuarios', async () => {
+        const currentTeamRef = { value: makeTeam({ users: [makeUser({ eId: 'USR00001' })] }) };
+        const { service } = makeServices(currentTeamRef);
+
+        const result = await service.getTeamById(1);
+
+        expect(result.users[0].status).toBe('online');
+    });
+
+    it('lanza BadRequestError si getMyTeams no recibe userId', async () => {
+        const currentTeamRef = { value: makeTeam() };
+        const { service } = makeServices(currentTeamRef);
+
+        await expect(service.getMyTeams('')).rejects.toThrow('User id is required');
+    });
+
     it('permite patch a un admin aunque no pertenezca al team', async () => {
         const currentTeamRef = { value: makeTeam({ users: [makeUser({ eId: 'USR00002' })] }) };
         const { service, repo } = makeServices(currentTeamRef);
@@ -169,5 +186,13 @@ describe('TeamsService.updateTeam', () => {
         expect(repo.updateTeam).not.toHaveBeenCalled();
         expect(repo.addTeamMembers).not.toHaveBeenCalled();
         expect(repo.removeTeamMembers).not.toHaveBeenCalled();
+    });
+
+    it('removeTeam valida acceso antes de eliminar', async () => {
+        const currentTeamRef = { value: makeTeam({ users: [makeUser({ eId: 'USR00001' })] }) };
+        const { service, repo } = makeServices(currentTeamRef);
+
+        await expect(service.removeTeam(1, 'USR00001', Roles.USER)).resolves.toBe(true);
+        expect(repo.removeTeam).toHaveBeenCalledWith(1);
     });
 });

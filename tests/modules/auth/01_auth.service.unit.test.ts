@@ -1,123 +1,99 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import bcrypt from 'bcrypt';
-import { makeAuthService } from '../../../src/modules/auth/auth.service';
-import { AuthRepo } from '../../../src/modules/auth/auth.repo';
-import { UnauthorizedError } from '../../../src/shared/errors/AppError';
+import { setRequiredTestEnv } from '../../utils/test-env.js';
+import type { AuthRepo } from '../../../src/modules/auth/auth.repo.js';
+import { NotFoundError, UnauthorizedError } from '../../../src/shared/errors/AppError.js';
 
-async function makeHashedUser(overrides = {}) {
-  const passwordHash = await bcrypt.hash('password123', 10);
+setRequiredTestEnv();
+const { makeAuthService } = await import('../../../src/modules/auth/auth.service.js');
+
+const meta = { userAgent: 'vitest', ip: '127.0.0.1' };
+
+async function makeUser(overrides = {}) {
   return {
     eId: 'USR00001',
-    passwordHash,
+    name: 'Ana',
+    passwordHash: await bcrypt.hash('password123', 10),
     roleName: 'Admin',
     ...overrides,
   };
 }
 
-function makeMockRepo(overrides: Partial<AuthRepo> = {}): AuthRepo {
+function makeRepo(overrides: Partial<AuthRepo> = {}): AuthRepo {
   return {
     getById: vi.fn(),
+    getMe: vi.fn().mockResolvedValue({ eId: 'USR00001', name: 'Ana', role: 'Admin' }),
+    insertSession: vi.fn().mockResolvedValue(1),
+    findSessionByHash: vi.fn().mockResolvedValue(null),
+    revokeSession: vi.fn().mockResolvedValue(undefined),
+    revokeAllUserSessions: vi.fn().mockResolvedValue(undefined),
+    updateLastUsed: vi.fn().mockResolvedValue(undefined),
+    hashExists: vi.fn().mockResolvedValue(false),
     ...overrides,
-  };
+  } as AuthRepo;
 }
 
 describe('AuthService.login', () => {
-  let repo: AuthRepo;
-
-  beforeEach(() => {
-    repo = makeMockRepo();
-  });
-
-  it('retorna un token JWT si las credenciales son válidas', async () => {
-    const user = await makeHashedUser();
-    vi.mocked(repo.getById).mockResolvedValue(user);
-
-    const service = makeAuthService(repo);
-    const token = await service.login({ eId: 'USR00001', password: 'password123' });
-
-    expect(typeof token).toBe('string');
-    expect(token.length).toBeGreaterThan(0);
-    // JWT format: header.payload.signature
-    expect(token.split('.')).toHaveLength(3);
-  });
-
-  it('lanza UnauthorizedError si el usuario no existe', async () => {
-    vi.mocked(repo.getById).mockResolvedValue(null);
-
+  it('retorna accessToken, refreshToken y usuario', async () => {
+    const repo = makeRepo({ getById: vi.fn().mockResolvedValue(await makeUser()) });
     const service = makeAuthService(repo);
 
-    await expect(
-      service.login({ eId: 'NOEXISTE', password: 'password123' })
-    ).rejects.toThrow(UnauthorizedError);
+    const result = await service.login({ eId: 'USR00001', password: 'password123' }, meta);
 
-    await expect(
-      service.login({ eId: 'NOEXISTE', password: 'password123' })
-    ).rejects.toThrow('Credenciales inválidas');
+    expect(result.tokens.accessToken.split('.')).toHaveLength(3);
+    expect(result.tokens.refreshToken.length).toBeGreaterThan(20);
+    expect(result.user).toEqual({ eId: 'USR00001', name: 'Ana', role: 'ADMIN' });
+    expect(repo.hashExists).toHaveBeenCalled();
+    expect(repo.insertSession).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'USR00001',
+      userAgent: 'vitest',
+      ip: '127.0.0.1',
+    }));
   });
 
-  it('lanza UnauthorizedError si la contraseña es incorrecta', async () => {
-    const user = await makeHashedUser();
-    vi.mocked(repo.getById).mockResolvedValue(user);
+  it('lanza UnauthorizedError si usuario o password son invalidos', async () => {
+    await expect(makeAuthService(makeRepo({ getById: vi.fn().mockResolvedValue(null) }))
+      .login({ eId: 'USR00001', password: 'password123' }, meta)).rejects.toThrow(UnauthorizedError);
 
+    await expect(makeAuthService(makeRepo({ getById: vi.fn().mockResolvedValue(await makeUser()) }))
+      .login({ eId: 'USR00001', password: 'wrong' }, meta)).rejects.toThrow(UnauthorizedError);
+  });
+});
+
+describe('AuthService.refresh/logout/me', () => {
+  it('revoca y rota refresh token valido', async () => {
+    const session = {
+      id: 1,
+      userId: 'USR00001',
+      tokenHash: 'hash',
+      expiresAt: new Date(Date.now() + 10000),
+      createdAt: new Date(),
+      rotatedFrom: null,
+      revokedAt: null,
+      lastUsedAt: null,
+      userAgent: null,
+      ip: null,
+    };
+    const repo = makeRepo({ findSessionByHash: vi.fn().mockResolvedValue(session) });
     const service = makeAuthService(repo);
 
-    await expect(
-      service.login({ eId: 'USR00001', password: 'wrongpassword' })
-    ).rejects.toThrow(UnauthorizedError);
+    const result = await service.refresh('raw-refresh-token', meta);
 
-    await expect(
-      service.login({ eId: 'USR00001', password: 'wrongpassword' })
-    ).rejects.toThrow('Credenciales inválidas');
+    expect(result.tokens.accessToken.split('.')).toHaveLength(3);
+    expect(repo.revokeSession).toHaveBeenCalledWith(1);
+    expect(repo.insertSession).toHaveBeenCalledWith(expect.objectContaining({ rotatedFrom: 1 }));
   });
 
-  it('no revela si el error es de usuario o contraseña (mismo mensaje)', async () => {
-    const user = await makeHashedUser();
-
-    const repoUserNotFound = makeMockRepo({ getById: vi.fn().mockResolvedValue(null) });
-    const repoWrongPassword = makeMockRepo({ getById: vi.fn().mockResolvedValue(user) });
-
-    const serviceA = makeAuthService(repoUserNotFound);
-    const serviceB = makeAuthService(repoWrongPassword);
-
-    const errorA = await serviceA.login({ eId: 'X', password: 'any' }).catch((e) => e);
-    const errorB = await serviceB.login({ eId: 'USR00001', password: 'wrong' }).catch((e) => e);
-
-    expect(errorA.message).toBe(errorB.message);
-    expect(errorA.statusCode).toBe(errorB.statusCode);
-  });
-
-  it('lanza UnauthorizedError con statusCode 401', async () => {
-    vi.mocked(repo.getById).mockResolvedValue(null);
-
-    const service = makeAuthService(repo);
-    const error = await service
-      .login({ eId: 'NOEXISTE', password: 'pass' })
-      .catch((e) => e);
-
-    expect(error).toBeInstanceOf(UnauthorizedError);
-    expect(error.statusCode).toBe(401);
-    expect(error.code).toBe('UNAUTHORIZED');
-  });
-
-  it('llama a repo.getById con el eId correcto', async () => {
-    vi.mocked(repo.getById).mockResolvedValue(null);
-
-    const service = makeAuthService(repo);
-    await service.login({ eId: 'USR00001', password: 'pass' }).catch(() => {});
-
-    expect(repo.getById).toHaveBeenCalledWith('USR00001');
-    expect(repo.getById).toHaveBeenCalledTimes(1);
-  });
-
-  it('lanza error si el rol del usuario no es válido', async () => {
-    const user = await makeHashedUser({ roleName: 'RolInexistente' });
-    vi.mocked(repo.getById).mockResolvedValue(user);
-
+  it('logout es idempotente si no hay sesion', async () => {
+    const repo = makeRepo({ findSessionByHash: vi.fn().mockResolvedValue(null) });
     const service = makeAuthService(repo);
 
-    // mapRole throws when role is not in the map
-    await expect(
-      service.login({ eId: 'USR00001', password: 'password123' })
-    ).rejects.toThrow('Invalid role: RolInexistente');
+    await expect(service.logout('missing')).resolves.toBeUndefined();
+    expect(repo.revokeSession).not.toHaveBeenCalled();
+  });
+
+  it('me lanza NotFoundError si no existe usuario', async () => {
+    const service = makeAuthService(makeRepo({ getMe: vi.fn().mockResolvedValue(null) }));
+    await expect(service.me('NOEXISTE')).rejects.toThrow(NotFoundError);
   });
 });

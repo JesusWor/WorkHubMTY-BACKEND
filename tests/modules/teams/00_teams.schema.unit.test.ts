@@ -1,5 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { ListTeamsQuerySchema, UpdateTeamSchema } from '../../../src/modules/teams/teams.schema';
+import {
+    CreateTeamSchema,
+    ListTeamsQuerySchema,
+    TeamIdSchema,
+    TeamMemberSchema,
+    TeamMembersSchema,
+    TeamSchema,
+    UpdateTeamSchema,
+} from '../../../src/modules/teams/teams.schema';
+
+const user = {
+    eId: 'USR00001',
+    name: 'Usuario',
+    email: 'usuario@example.com',
+    roleName: 'USER',
+    title: null,
+    status: 'offline',
+};
+
+describe('Team schemas', () => {
+    it('acepta team, miembro y team con miembros', () => {
+        expect(TeamIdSchema.safeParse('team-1').success).toBe(true);
+        expect(TeamSchema.safeParse({ id: 1, name: 'Team A', description: null, memberCount: 2 }).success).toBe(true);
+        expect(TeamMemberSchema.safeParse(user).success).toBe(true);
+        expect(TeamMembersSchema.safeParse({
+            id: 1,
+            name: 'Team A',
+            description: 'Descripcion',
+            users: [user],
+        }).success).toBe(true);
+    });
+
+    it('CreateTeamSchema exige name y al menos un miembro', () => {
+        expect(CreateTeamSchema.safeParse({
+            name: 'Team A',
+            memberEIds: ['USR00001'],
+        }).success).toBe(true);
+        expect(CreateTeamSchema.safeParse({ name: 'Team A', memberEIds: [] }).success).toBe(false);
+        expect(CreateTeamSchema.safeParse({ memberEIds: ['USR00001'] }).success).toBe(false);
+    });
+});
 
 describe('UpdateTeamSchema', () => {
     it('acepta solo metadata del team', () => {

@@ -1,13 +1,22 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import request from 'supertest';
 import { z } from 'zod';
-import { seed, useSeedSetup } from '../../setup';
-import { createTestApp } from '../../../src/app/testContainer.js';
 import { ErrorResponseSchema } from '../../utils/zod.util';
+import { shouldSkipDbIntegration } from '../../utils/test-env';
 
-const { app, db } = createTestApp();
+const skipDbIntegration = shouldSkipDbIntegration();
+const describeIfDb = skipDbIntegration ? describe.skip : describe;
+let app: any;
+let db: any;
+let seed: any;
 
-useSeedSetup({ tables: ['roles', 'users', 'parking_lots', 'parking_reservations'] });
+if (!skipDbIntegration) {
+    const setup = await import('../../setup');
+    const testContainer = await import('../../../src/app/testContainer.js');
+    seed = setup.seed;
+    ({ app, db } = testContainer.createTestApp());
+    setup.useSeedSetup({ tables: ['roles', 'users', 'parking_lots', 'parking_reservations'] });
+}
 
 const CursorResponseSchema = z.object({
     success: z.literal(true),
@@ -32,7 +41,7 @@ async function createReservation(agent: any, payload: Record<string, unknown>) {
         .expect(201);
 }
 
-describe('GET /api/parking/reservations', () => {
+describeIfDb('GET /api/parking/reservations', () => {
     it('retorna 401 si no esta autenticado', async () => {
         await request(app)
             .get('/api/parking/reservations')
@@ -127,5 +136,6 @@ describe('GET /api/parking/reservations', () => {
 });
 
 afterAll(async () => {
+    if (!db) return;
     await db.close();
 });

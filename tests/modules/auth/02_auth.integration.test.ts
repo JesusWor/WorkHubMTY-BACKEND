@@ -1,19 +1,32 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { seed } from '../../setup';
-import { createTestApp } from '../../../src/app/testContainer';
 import { SuccessResponseSchema, ErrorResponseSchema, ZodErrorResponseSchema } from '../../utils/zod.util';
+import { shouldSkipDbIntegration } from '../../utils/test-env';
 
-const { app, db } = createTestApp();
-const agent = request.agent(app);
+const skipDbIntegration = shouldSkipDbIntegration();
+const describeIfDb = skipDbIntegration ? describe.skip : describe;
+let app: any;
+let db: any;
+let seed: any;
+let agent: any;
+let validCredentials: { eId: string; password: string };
 const cookies = request.cookies;
 
-const validCredentials = {
-  eId: seed.users[0].eId,
-  password: seed.users[0].password,
-};
+if (!skipDbIntegration) {
+  const setup = await import('../../setup');
+  const testContainer = await import('../../../src/app/testContainer');
+  seed = setup.seed;
+  ({ app, db } = testContainer.createTestApp());
+  agent = request.agent(app);
+  validCredentials = {
+    eId: seed.users[0].eId,
+    password: seed.users[0].password,
+  };
+}
 
 beforeAll(async () => {
+  if (skipDbIntegration) return;
+
   await agent
     .post('/api/auth/login')
     .send(validCredentials)
@@ -21,10 +34,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (!db) return;
   await db.close();
 });
 
-describe('POST /api/auth/login', () => {
+describeIfDb('POST /api/auth/login', () => {
 
   it('retorna 200, body válido y setea cookie httpOnly', async () => {
     await request(app)
@@ -117,7 +131,7 @@ describe('POST /api/auth/login', () => {
   });
 });
 
-describe('POST /api/auth/logout', () => {
+describeIfDb('POST /api/auth/logout', () => {
 
   it('retorna 401 si no hay cookie token', async () => {
     // Plain request(app) — no agent, no cookie
