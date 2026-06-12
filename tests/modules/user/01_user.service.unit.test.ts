@@ -32,7 +32,7 @@ function makeDeps() {
             { fromUser: "USR00003", toUser: "USR00001" },
         ]),
         getSentRequests: vi.fn().mockResolvedValue([
-            { fromUser: "USR00001", toUser: "USR00004" },
+            { eId: "USR00004" },
         ]),
         createRequest: vi.fn(),
         acceptRequest: vi.fn(),

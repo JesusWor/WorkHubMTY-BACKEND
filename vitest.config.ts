@@ -5,7 +5,10 @@ dotenv.config({ path: '.env.test', override: true }); // carga antes que todo
 
 export default defineConfig({
   test: {
-    // coverage: { enabled: true },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+    },
     projects: [
       {
         test: {
