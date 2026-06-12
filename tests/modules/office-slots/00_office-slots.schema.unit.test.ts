@@ -17,9 +17,11 @@ import {
 
 const reservable = {
   id: 1,
+  code: 'S-01',
   name: 'Sala Norte',
   capacity: 8,
   floor: 'Piso 1',
+  floor_id: 1,
   status: 'available',
   is_blocked: false,
 };
@@ -51,6 +53,7 @@ describe('Reservable schemas', () => {
   it('acepta reservable y create/update', () => {
     expect(ReservableSchema.safeParse(reservable).success).toBe(true);
     expect(CreateReservableSchema.safeParse({
+      code: 'S-01',
       name: 'Sala Norte',
       capacity: 8,
       status: 'available',
